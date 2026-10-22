@@ -1,0 +1,6 @@
+{
+  "author": { "en": "Fr. Tadros Y. Malaty", "ar": "القمص تادرس يعقوب" },
+  "work": { "en": "Bible Commentary", "ar": "تفسير الكتاب المقدس" },
+  "notice": "Commentary text is published for use on copticfaith.org with the permission of the rights holder. The repository's MIT license covers code only, not the commentary text.",
+  "source": "Coptic Commentaries app (authorId=ty) English and Arabic databases"
+}
