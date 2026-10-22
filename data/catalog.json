@@ -711,7 +711,7 @@
       "excluded_from_commentary": true
     },
     {
-      "id": 1,
+      "id": 47,
       "name": "متى",
       "shortName": "مت",
       "chaptersCount": 28,
@@ -726,7 +726,7 @@
       "excluded_from_commentary": false
     },
     {
-      "id": 2,
+      "id": 48,
       "name": "مرقس",
       "shortName": "مر",
       "chaptersCount": 16,
@@ -741,7 +741,7 @@
       "excluded_from_commentary": false
     },
     {
-      "id": 3,
+      "id": 49,
       "name": "لوقا",
       "shortName": "لو",
       "chaptersCount": 24,
@@ -756,7 +756,7 @@
       "excluded_from_commentary": false
     },
     {
-      "id": 4,
+      "id": 50,
       "name": "يوحنا",
       "shortName": "يو",
       "chaptersCount": 21,
@@ -771,7 +771,7 @@
       "excluded_from_commentary": false
     },
     {
-      "id": 5,
+      "id": 51,
       "name": "أعمال الرسل",
       "shortName": "أع",
       "chaptersCount": 28,
@@ -786,7 +786,7 @@
       "excluded_from_commentary": false
     },
     {
-      "id": 6,
+      "id": 52,
       "name": "رومية",
       "shortName": "رو",
       "chaptersCount": 16,
@@ -801,7 +801,7 @@
       "excluded_from_commentary": false
     },
     {
-      "id": 7,
+      "id": 53,
       "name": "١كورنثوس",
       "shortName": "١كو",
       "chaptersCount": 16,
@@ -816,7 +816,7 @@
       "excluded_from_commentary": false
     },
     {
-      "id": 8,
+      "id": 54,
       "name": "٢كورنثوس",
       "shortName": "٢كو",
       "chaptersCount": 13,
@@ -831,7 +831,7 @@
       "excluded_from_commentary": false
     },
     {
-      "id": 9,
+      "id": 55,
       "name": "غلاطيه",
       "shortName": "غل",
       "chaptersCount": 6,
@@ -846,7 +846,7 @@
       "excluded_from_commentary": false
     },
     {
-      "id": 10,
+      "id": 56,
       "name": "افسس",
       "shortName": "أف",
       "chaptersCount": 6,
@@ -861,7 +861,7 @@
       "excluded_from_commentary": false
     },
     {
-      "id": 11,
+      "id": 57,
       "name": "فيلبي",
       "shortName": "في",
       "chaptersCount": 4,
@@ -876,7 +876,7 @@
       "excluded_from_commentary": false
     },
     {
-      "id": 12,
+      "id": 58,
       "name": "كولوسي",
       "shortName": "كو",
       "chaptersCount": 4,
@@ -891,7 +891,7 @@
       "excluded_from_commentary": false
     },
     {
-      "id": 13,
+      "id": 59,
       "name": "١تسالونيكي",
       "shortName": "١تس",
       "chaptersCount": 5,
@@ -906,7 +906,7 @@
       "excluded_from_commentary": false
     },
     {
-      "id": 14,
+      "id": 60,
       "name": "٢تسالونيكى",
       "shortName": "٢تس",
       "chaptersCount": 3,
@@ -921,7 +921,7 @@
       "excluded_from_commentary": false
     },
     {
-      "id": 15,
+      "id": 61,
       "name": "١تيموثاوس",
       "shortName": "١تيمو",
       "chaptersCount": 6,
@@ -936,7 +936,7 @@
       "excluded_from_commentary": false
     },
     {
-      "id": 16,
+      "id": 62,
       "name": "٢تيموثاوس",
       "shortName": "٢تيمو",
       "chaptersCount": 4,
@@ -951,7 +951,7 @@
       "excluded_from_commentary": false
     },
     {
-      "id": 17,
+      "id": 63,
       "name": "تيطس",
       "shortName": "تي",
       "chaptersCount": 3,
@@ -966,7 +966,7 @@
       "excluded_from_commentary": false
     },
     {
-      "id": 18,
+      "id": 64,
       "name": "فليمون",
       "shortName": "فل",
       "chaptersCount": 1,
@@ -981,7 +981,7 @@
       "excluded_from_commentary": false
     },
     {
-      "id": 19,
+      "id": 65,
       "name": "عبرانيين",
       "shortName": "عب",
       "chaptersCount": 13,
@@ -996,7 +996,7 @@
       "excluded_from_commentary": false
     },
     {
-      "id": 20,
+      "id": 66,
       "name": "يعقوب",
       "shortName": "يع",
       "chaptersCount": 5,
@@ -1011,7 +1011,7 @@
       "excluded_from_commentary": false
     },
     {
-      "id": 21,
+      "id": 67,
       "name": "١بطرس",
       "shortName": "١بط",
       "chaptersCount": 5,
@@ -1026,7 +1026,7 @@
       "excluded_from_commentary": false
     },
     {
-      "id": 22,
+      "id": 68,
       "name": "٢بطرس",
       "shortName": "٢بط",
       "chaptersCount": 3,
@@ -1041,7 +1041,7 @@
       "excluded_from_commentary": false
     },
     {
-      "id": 23,
+      "id": 69,
       "name": "١يوحنا",
       "shortName": "١يو",
       "chaptersCount": 5,
@@ -1056,7 +1056,7 @@
       "excluded_from_commentary": false
     },
     {
-      "id": 24,
+      "id": 70,
       "name": "٢يوحنا",
       "shortName": "٢يو",
       "chaptersCount": 1,
@@ -1071,7 +1071,7 @@
       "excluded_from_commentary": false
     },
     {
-      "id": 25,
+      "id": 71,
       "name": "٣يوحنا",
       "shortName": "٣يو",
       "chaptersCount": 1,
@@ -1086,7 +1086,7 @@
       "excluded_from_commentary": false
     },
     {
-      "id": 26,
+      "id": 72,
       "name": "رسالة يهوذا",
       "shortName": "يه",
       "chaptersCount": 1,
@@ -1101,7 +1101,7 @@
       "excluded_from_commentary": false
     },
     {
-      "id": 27,
+      "id": 73,
       "name": "سفر الرؤيا",
       "shortName": "رؤ",
       "chaptersCount": 22,
