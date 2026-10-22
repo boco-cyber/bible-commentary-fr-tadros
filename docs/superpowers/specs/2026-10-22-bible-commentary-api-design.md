@@ -42,8 +42,10 @@ Key facts established during extraction:
 - Every book has a chapter `0` record representing the book introduction.
 - English and Arabic have identical source record keys (7,590 each), enabling
   a lossless one-row-per-section join.
-- 36,810 English and 38,468 Arabic structured scripture references; 4,731 EN
-  and 4,823 AR sections contain at least one.
+- 36,810 English and 38,468 Arabic reference tokens, expanding to 43,327 EN
+  and 45,235 AR target segments; 4,731 EN and 4,823 AR sections contain at
+  least one reference. Reference lists differ between languages, so they are
+  stored per language rather than paired.
 - Content contains no images. Markdown links are rare and safe to render with
   raw HTML disabled.
 
@@ -121,9 +123,9 @@ bible-commentary-fr-tadros/
 │   │   ├── api.test.js
 │   │   ├── search.test.js
 │   │   └── build-db.test.js
-│   ├── Dockerfile
 │   ├── package.json
 │   └── .env.example
+├── Dockerfile                     # repo-root context so it can copy data/
 ├── data/
 │   ├── catalog.json
 │   ├── attribution.json
@@ -197,22 +199,21 @@ CREATE TABLE sections (
 CREATE TABLE section_refs (
   id            INTEGER PRIMARY KEY,
   section_id    INTEGER NOT NULL REFERENCES sections(id),
+  lang          TEXT NOT NULL CHECK (lang IN ('en','ar')),
   ref_type      TEXT NOT NULL,
   book_id       INTEGER NOT NULL,
   chapter       INTEGER NOT NULL,
   verse_start   INTEGER NOT NULL,
   verse_end     INTEGER NOT NULL,
-  label_en      TEXT NOT NULL,
-  label_ar      TEXT NOT NULL,
-  display_en    TEXT NOT NULL,
-  display_ar    TEXT NOT NULL,
+  label         TEXT NOT NULL,
+  display       TEXT NOT NULL,
   raw_token     TEXT NOT NULL
 );
 
 CREATE INDEX idx_chapters_book ON chapters(book_id, number);
 CREATE INDEX idx_sections_chapter ON sections(chapter_id, sequence_number);
 CREATE INDEX idx_refs_target ON section_refs(book_id, chapter, verse_start, verse_end);
-CREATE INDEX idx_refs_section ON section_refs(section_id);
+CREATE INDEX idx_refs_section ON section_refs(section_id, lang);
 ```
 
 Full-text tables are FTS5 external-content tables over plain-text versions of
@@ -283,8 +284,8 @@ It produces the committed `data/` files:
    - Identical `source_record_id` sets across languages.
    - Non-empty content in both languages.
    - Book/chapter numbers within catalog expectations.
-   - Reference counts match expectations (36,810 EN / 38,468 AR) and every
-     reference segment has a valid book and positive chapter/verse.
+   - Reference segment counts match expectations (43,327 EN / 45,235 AR) and
+     every reference segment has a valid book and positive chapter/verse.
 3. Join EN/AR by `source_record_id`.
 4. Render Markdown to HTML with `markdown-it` (`html: false`, `linkify: true`)
    and sanitize with `sanitize-html` using a conservative allowlist.
@@ -369,10 +370,11 @@ Status codes: `400` invalid parameters or query, `404` unknown resource,
 
 ### Cross-references
 
-- Section payloads include resolved refs with book slug, chapter, verse range,
-  and EN/AR labels.
-- `/references?book=genesis&chapter=1&verse=1` returns every section whose
-  reference range covers the verse, ordered by book/chapter/section, paginated.
+- Section payloads include resolved refs for the requested `lang`, with book
+  slug, chapter, verse range, label, and display text.
+- `/references?book=genesis&chapter=1&verse=1&lang=ar` returns every section
+  whose reference range covers the verse, using that language's refs, ordered
+  by book/chapter/section and paginated. Sections are de-duplicated.
 - Reference ranges are inclusive. A missing verse or book returns `404`.
 
 ### Caching, limits, and safety
@@ -417,6 +419,7 @@ The DB is never committed. It is built from the committed gzipped JSONL.
 ### Coolify
 
 - Application type: Dockerfile, repo `boco-cyber/bible-commentary-fr-tadros`.
+- Dockerfile location: `/Dockerfile`; base directory `/` (needed to copy `data/`).
 - Domain: `https://commentary.copticfaith.org`, container port `3000`.
 - Health check path: `/health`.
 - No persistent volume (DB is in the image).
