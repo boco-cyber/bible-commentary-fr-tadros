@@ -25,7 +25,11 @@ test('Arabic FTS matches with and without diacritics', () => {
 
 test('plain bodies contain no markdown or raw markup', () => {
   const db = openDb(DB);
-  const row = db.prepare('SELECT body FROM sections_plain_en LIMIT 1').get();
-  assert.equal(/\*\*|\{\{|^#/m.test(row.body), false);
+  for (const table of ['sections_plain_en', 'sections_plain_ar']) {
+    const rows = db.prepare(`SELECT id, body FROM ${table}`).all();
+    for (const row of rows) {
+      assert.doesNotMatch(row.body, /\{\{|\}\}|\*\*|^#/m, `${table} id ${row.id} contains markup`);
+    }
+  }
   db.close();
 });

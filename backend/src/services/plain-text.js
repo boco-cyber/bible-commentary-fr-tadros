@@ -5,6 +5,8 @@ function markdownToPlain(markdown) {
     .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
     .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
     .replace(/<[^>]+>/g, ' ')
+    .replace(/\{\{[^}]*\}/g, ' ')
+    .replace(/[{}]/g, ' ')
     .replace(/^\s{0,3}#{1,6}\s*/gm, '')
     .replace(/^\s*[-*+]\s+/gm, '')
     .replace(/^\s*\d+\.\s+/gm, '')
