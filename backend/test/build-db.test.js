@@ -126,10 +126,73 @@ test('Arabic section titles preserve non-empty source headings', async () => {
   db.close();
 });
 
+test('commentary chunks cover every ranged section in both languages', () => {
+  const db = openDb(DB);
+  const sections = db.prepare("SELECT id, verse_ranges_json FROM sections WHERE verse_ranges_json != '[]'").all();
+  const rows = db.prepare(`SELECT section_id, lang, verse_start, verse_end, content_md, content_html, content_hash
+    FROM commentary_chunks ORDER BY section_id, lang, sequence_number`).all();
+  const bySection = new Map();
+  for (const row of rows) {
+    const key = `${row.section_id}:${row.lang}`;
+    if (!bySection.has(key)) bySection.set(key, []);
+    bySection.get(key).push(row);
+  }
+  for (const section of sections) {
+    const [start, end] = JSON.parse(section.verse_ranges_json)[0];
+    for (const lang of ['en', 'ar']) {
+      const chunks = bySection.get(`${section.id}:${lang}`) || [];
+      if (!chunks.length) {
+        const content = db.prepare(`SELECT content_md_en, content_md_ar FROM sections WHERE id = ?`).get(section.id);
+        const body = (lang === 'en' ? content.content_md_en : content.content_md_ar)
+          .replace(/^(?:\s*\[v\d+\])+\s*/, '').trim();
+        assert.equal(body, '', `missing ${lang} chunks for non-empty section ${section.id}`);
+        continue;
+      }
+      assert.equal(chunks[0].verse_start, start);
+      assert.equal(chunks[chunks.length - 1].verse_end, end);
+      let expected = start;
+      for (const chunk of chunks) {
+        assert.equal(chunk.verse_start, expected);
+        assert.ok(chunk.verse_end >= chunk.verse_start);
+        assert.ok(chunk.content_md.length > 0);
+        assert.ok(chunk.content_html.length > 0);
+        assert.equal(/<script/i.test(chunk.content_html), false);
+        assert.match(chunk.content_hash, /^[0-9a-f]{64}$/);
+        expected = chunk.verse_end + 1;
+      }
+      assert.equal(expected, end + 1);
+    }
+  }
+  db.close();
+});
+
+test('John 9 chunks follow the inline verse quotes in both languages', () => {
+  const db = openDb(DB);
+  const section = db.prepare("SELECT id FROM sections WHERE source_record_id='nt_4_9:1'").get();
+  for (const lang of ['en', 'ar']) {
+    const chunks = db.prepare(`SELECT verse_start, verse_end, content_md FROM commentary_chunks
+      WHERE section_id = ? AND lang = ? ORDER BY sequence_number`).all(section.id, lang);
+    assert.deepEqual(chunks.map((chunk) => [chunk.verse_start, chunk.verse_end]),
+      [[1, 1], [2, 2], [3, 3], [4, 4], [5, 5], [6, 6], [7, 7]]);
+    assert.match(chunks[0].content_md, lang === 'en' ? /Now as Jesus passed by/ : /وفيما هو مجتاز/);
+  }
+  db.close();
+});
+
+test('table content is preserved inside commentary chunks', () => {
+  const db = openDb(DB);
+  const section = db.prepare("SELECT id FROM sections WHERE source_record_id='ot_1_5:1'").get();
+  const chunks = db.prepare("SELECT content_md FROM commentary_chunks WHERE section_id = ? AND lang = 'en'").all(section.id);
+  assert.ok(chunks.some((chunk) => chunk.content_md.includes('| --- |')), 'expected a Markdown table in a chunk');
+  db.close();
+});
+
 test('meta records schema, counts, provenance, and checksums', () => {
   const db = openDb(DB);
   const meta = Object.fromEntries(db.prepare('SELECT key, value FROM meta').all().map((r) => [r.key, r.value]));
-  assert.equal(meta.schema_version, '2');
+  assert.equal(meta.schema_version, '4');
+  assert.equal(meta.chunks_en, '12457');
+  assert.equal(meta.chunks_ar, '11955');
   assert.equal(meta.sections, '7590');
   assert.equal(meta.books, '67');
   assert.equal(meta.books_total, '73');

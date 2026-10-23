@@ -52,6 +52,17 @@ function listChapterRefs(db, chapterId, lang) {
     WHERE s.chapter_id = ? AND r.lang = ? ORDER BY r.id`).all(chapterId, lang);
 }
 
+function findVerseChunks(db, { bookId, chapter, verse, lang }) {
+  return db.prepare(`SELECT bc.id, bc.section_id, bc.lang, bc.verse_start, bc.verse_end,
+      bc.content_md, bc.content_html, bc.content_hash,
+      s.section_index, s.title_en, s.title_ar
+    FROM commentary_chunks bc
+    JOIN sections s ON s.id = bc.section_id
+    WHERE bc.lang = ? AND bc.book_id = ? AND bc.chapter = ?
+      AND bc.verse_start <= ? AND bc.verse_end >= ?
+    ORDER BY s.sequence_number, bc.sequence_number`).all(lang, bookId, chapter, verse, verse);
+}
+
 function findSectionById(db, id) {
   return db.prepare('SELECT * FROM sections WHERE id = ?').get(Number(id)) || null;
 }
@@ -120,6 +131,7 @@ module.exports = {
   listSectionSummaries,
   listChapterSections,
   listChapterRefs,
+  findVerseChunks,
   findSectionById,
   findSectionByIndex,
   listSectionRefs,

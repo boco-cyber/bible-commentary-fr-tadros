@@ -7,6 +7,7 @@ const { readJsonlGz } = require('./lib/jsonl');
 const { renderMarkdown } = require('../src/services/render');
 const { markdownToPlain } = require('../src/services/plain-text');
 const { normalizeForSearch } = require('../src/services/normalize');
+const { splitCommentary } = require('../src/services/split-commentary');
 
 const EXPECTED = {
   books: 67,
@@ -16,12 +17,24 @@ const EXPECTED = {
   refSegmentsAr: 45234,
   droppedRefsEn: 1,
   droppedRefsAr: 1,
-  schemaVersion: 2,
+  chunksEn: 12457,
+  chunksAr: 11955,
+  schemaVersion: 4,
 };
 const DEFAULT_DATA = path.join(__dirname, '..', '..', 'data');
 const DEFAULT_OUT = path.join(__dirname, '..', 'data', 'commentary.sqlite');
 
 const SCHEMA = `
+CREATE TABLE scripture_verses (
+  id INTEGER PRIMARY KEY, book_id INTEGER NOT NULL REFERENCES books(id),
+  chapter INTEGER NOT NULL, verse INTEGER NOT NULL, lang TEXT NOT NULL,
+  text TEXT NOT NULL, normalized TEXT NOT NULL,
+  UNIQUE(book_id, chapter, verse, lang)
+);
+CREATE VIRTUAL TABLE scripture_fts USING fts5(
+  normalized, content='scripture_verses', content_rowid='id',
+  tokenize='unicode61 remove_diacritics 2'
+);
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE books (
   id INTEGER PRIMARY KEY, slug TEXT NOT NULL UNIQUE, book_number INTEGER NOT NULL,
@@ -61,6 +74,22 @@ CREATE TABLE section_refs (
 );
 CREATE INDEX idx_refs_target ON section_refs(book_id, chapter, verse_start, verse_end);
 CREATE INDEX idx_refs_section ON section_refs(section_id, lang);
+CREATE TABLE commentary_chunks (
+  id INTEGER PRIMARY KEY,
+  section_id INTEGER NOT NULL REFERENCES sections(id),
+  book_id INTEGER NOT NULL,
+  chapter INTEGER NOT NULL,
+  lang TEXT NOT NULL CHECK (lang IN ('en','ar')),
+  sequence_number INTEGER NOT NULL,
+  verse_start INTEGER NOT NULL,
+  verse_end INTEGER NOT NULL,
+  content_md TEXT NOT NULL,
+  content_html TEXT NOT NULL,
+  content_hash TEXT NOT NULL,
+  UNIQUE (section_id, lang, sequence_number)
+);
+CREATE INDEX idx_chunks_lookup ON commentary_chunks(lang, book_id, chapter, verse_start, verse_end);
+CREATE INDEX idx_chunks_section ON commentary_chunks(section_id, lang, sequence_number);
 CREATE TABLE sections_plain_en (
   id INTEGER PRIMARY KEY REFERENCES sections(id), title TEXT NOT NULL, body TEXT NOT NULL
 );
@@ -140,6 +169,7 @@ async function buildDb({ dataDir, outFile }) {
 
   let db = null;
   let inserted = 0;
+  const chunkCounts = { en: 0, ar: 0 };
   let committed = false;
   try {
     db = new Database(tempFile);
@@ -156,6 +186,9 @@ async function buildDb({ dataDir, outFile }) {
        content_md_en, content_md_ar, content_html_en, content_html_ar, content_hash)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
 
+    const insertChunk = db.prepare(`INSERT INTO commentary_chunks
+      (section_id, book_id, chapter, lang, sequence_number, verse_start, verse_end, content_md, content_html, content_hash)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     const insertRef = db.prepare(`INSERT INTO section_refs
       (section_id, lang, ref_type, book_id, chapter, verse_start, verse_end, label, display, raw_token)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
@@ -228,6 +261,25 @@ async function buildDb({ dataDir, outFile }) {
             );
             if (!infoSection.changes) throw new Error(`Failed to insert ${key}`);
             const sectionId = Number(infoSection.lastInsertRowid);
+            const ranges = enRow.verse_ranges || [];
+            if (ranges.length > 1) throw new Error(`Multiple verse ranges are not supported for ${key}`);
+            if (ranges.length === 1) {
+              const [start, end] = ranges[0].map(Number);
+              for (const [lang, markdown] of [['en', mdEn], ['ar', mdAr]]) {
+                const chunks = splitCommentary(markdown, start, end);
+                for (const [index, chunk] of chunks.entries()) {
+                  const chunkHash = crypto.createHash('sha256')
+                    .update([contentHash, lang, chunk.verseStart, chunk.verseEnd, chunk.markdown].join('\0'))
+                    .digest('hex');
+                  insertChunk.run(
+                    sectionId, book.id, number, lang, index,
+                    chunk.verseStart, chunk.verseEnd, chunk.markdown,
+                    renderMarkdown(chunk.markdown), chunkHash,
+                  );
+                  chunkCounts[lang] += 1;
+                }
+              }
+            }
             for (const [lang, row] of [['en', enRow], ['ar', arRow]]) {
               for (const ref of row.references || []) {
                 const targetBookId = Number(ref.book_id);
@@ -268,6 +320,9 @@ async function buildDb({ dataDir, outFile }) {
       if (droppedRefs.en !== EXPECTED.droppedRefsEn || droppedRefs.ar !== EXPECTED.droppedRefsAr) {
         throw new Error(`Unexpected dropped reference counts: ${droppedRefs.en}/${droppedRefs.ar}`);
       }
+      if (chunkCounts.en !== EXPECTED.chunksEn || chunkCounts.ar !== EXPECTED.chunksAr) {
+        throw new Error(`Unexpected commentary chunk counts: ${chunkCounts.en}/${chunkCounts.ar}`);
+      }
       const contentChecksum = crypto.createHash('sha256').update(contentHashes.sort().join('\n')).digest('hex');
       const setMeta = db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)');
       setMeta.run('schema_version', String(EXPECTED.schemaVersion));
@@ -279,6 +334,8 @@ async function buildDb({ dataDir, outFile }) {
       setMeta.run('ref_segments_ar', String(refCounts.ar));
       setMeta.run('dropped_refs_en', String(droppedRefs.en));
       setMeta.run('dropped_refs_ar', String(droppedRefs.ar));
+      setMeta.run('chunks_en', String(chunkCounts.en));
+      setMeta.run('chunks_ar', String(chunkCounts.ar));
       setMeta.run('source_sha256_en', sourceShaEn);
       setMeta.run('source_sha256_ar', sourceShaAr);
       setMeta.run('content_checksum', contentChecksum);
@@ -290,6 +347,23 @@ async function buildDb({ dataDir, outFile }) {
       setMeta.run('attribution', `${attribution.author.en} / ${attribution.author.ar}`);
     });
     transaction();
+    const insertVerse = db.prepare('INSERT INTO scripture_verses (book_id, chapter, verse, lang, text, normalized) VALUES (?, ?, ?, ?, ?, ?)');
+    const bookIds = new Map(db.prepare('SELECT id, slug FROM books').all().map((book) => [book.slug, book.id]));
+    for (const [lang, file, expected] of [['en', 'kjv', 31102], ['ar', 'avd', 31104]]) {
+      const verses = [];
+      for await (const row of readJsonlGz(path.join(dataDir, 'bible', `${file}.jsonl.gz`))) {
+        if (!bookIds.has(row.book) || !Number.isInteger(row.chapter) || row.chapter < 1
+          || !Number.isInteger(row.verse) || row.verse < 1 || typeof row.text !== 'string' || !row.text.trim()) {
+          throw new Error(`Invalid Scripture row in ${file}`);
+        }
+        verses.push(row);
+      }
+      if (verses.length !== expected) throw new Error(`Unexpected Scripture count in ${file}: ${verses.length}`);
+      db.transaction(() => {
+        for (const row of verses) insertVerse.run(bookIds.get(row.book), row.chapter, row.verse, lang, row.text, normalizeForSearch(row.text));
+      })();
+    }
+    db.exec("INSERT INTO scripture_fts(scripture_fts) VALUES('rebuild')");
     db.exec("INSERT INTO sections_fts_en(sections_fts_en) VALUES('rebuild')");
     db.exec("INSERT INTO sections_fts_ar(sections_fts_ar) VALUES('rebuild')");
     db.close();
@@ -303,13 +377,13 @@ async function buildDb({ dataDir, outFile }) {
       if (!committed) fs.rmSync(tempFile, { force: true });
     }
   }
-  return { books: included.length, sections: inserted };
+  return { books: included.length, sections: inserted, chunks: chunkCounts };
 }
 
 if (require.main === module) {
   const options = parseArgs();
   buildDb(options)
-    .then((result) => console.log(`built ${options.outFile}: ${result.books} books, ${result.sections} sections`))
+    .then((result) => console.log(`built ${options.outFile}: ${result.books} books, ${result.sections} sections, ${result.chunks.en}/${result.chunks.ar} commentary chunks`))
     .catch((error) => { console.error(error); process.exit(1); });
 }
 

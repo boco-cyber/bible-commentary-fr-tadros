@@ -40,6 +40,20 @@ function chapterDetail(book, chapter, sections) {
   };
 }
 
+function referencePayload(ref) {
+  return {
+    type: ref.ref_type,
+    book_id: ref.book_id,
+    book_slug: ref.book_slug,
+    book: { slug: ref.book_slug, name: { en: ref.book_name_en, ar: ref.book_name_ar } },
+    chapter: ref.chapter,
+    verse_start: ref.verse_start,
+    verse_end: ref.verse_end,
+    label: ref.label,
+    display: ref.display,
+  };
+}
+
 function sectionPayload(row, book, chapter, refs, lang, format, baseUrl) {
   const content = {};
   if (format === 'markdown' || format === 'both') content.markdown = row[`content_md_${lang}`];
@@ -55,20 +69,10 @@ function sectionPayload(row, book, chapter, refs, lang, format, baseUrl) {
     title: { [lang]: lang === 'ar' ? row.title_ar : row.title_en },
     verse_ranges: JSON.parse(row.verse_ranges_json),
     content,
-    references: refs.map((ref) => ({
-      type: ref.ref_type,
-      book_id: ref.book_id,
-      book_slug: ref.book_slug,
-      book: { slug: ref.book_slug, name: { en: ref.book_name_en, ar: ref.book_name_ar } },
-      chapter: ref.chapter,
-      verse_start: ref.verse_start,
-      verse_end: ref.verse_end,
-      label: ref.label,
-      display: ref.display,
-    })),
+    references: refs.map(referencePayload),
     content_hash: row.content_hash,
     url: `${baseUrl}/api/v1/sections/${row.id}`,
   };
 }
 
-module.exports = { bookSummary, bookDetail, chapterDetail, sectionPayload };
+module.exports = { bookSummary, bookDetail, chapterDetail, referencePayload, sectionPayload };

@@ -16,6 +16,7 @@ commentary of Fr. Tadros Y. Malaty / القمص تادرس يعقوب.
 - Scripture cross-reference lookup in both directions.
 - Bilingual verse reader using public-domain KJV and Arabic Smith–Van Dyke.
 - Combined `/study` endpoint with commentary blocks placed after each verse range.
+- Per-verse commentary chunks, so a verse picker can show the commentary for one verse.
 - SQLite + FTS5 inside a single image; no external database.
 
 ## Quick start
@@ -41,12 +42,16 @@ in `backend/.env.example`.
 | Endpoint | Description |
 |---|---|
 | `GET /health` | Liveness and corpus counts |
+| `GET /api/v1/navigation` | Book, chapter and verse picker with section associations |
+| `GET /api/v1/resolve` | Resolve a Bible reference to bilingual text |
+| `GET /api/v1/scripture/search` | Search Bible words and phrases (KJV/AVD) |
 | `GET /api/v1/meta` | Author, attribution, languages, counts, build |
 | `GET /api/v1/books` | Book catalog, optionally filtered by testament |
 | `GET /api/v1/books/:book` | Book detail and chapter list |
 | `GET /api/v1/books/:book/chapters/:chapter` | Chapter and section summaries |
 | `GET /api/v1/books/:book/chapters/:chapter/scripture` | Verse text (KJV + AVD) and commentary indices |
 | `GET /api/v1/books/:book/chapters/:chapter/study` | Verses with commentary blocks after each verse range |
+| `GET /api/v1/books/:book/chapters/:chapter/verses/:verse/commentary` | Commentary chunks covering one selected verse |
 | `GET /api/v1/books/:book/chapters/:chapter/sections/:index` | Full section |
 | `GET /api/v1/sections/:id` | Full section by id |
 | `GET /api/v1/parallel` | Same section in English and Arabic |
@@ -61,8 +66,9 @@ flow, [docs/DATA.md](docs/DATA.md) for Scripture provenance and formats, and
 ## Data pipeline
 
 `backend/scripts/build-db.js` validates the committed gzipped JSONL and builds
-`commentary.sqlite` during CI and Docker image builds. The server opens the
-database read-only and never writes to it at runtime.
+`commentary.sqlite` during CI and Docker image builds. It also splits each
+ranged commentary section into verse-aware chunks for the per-verse endpoint.
+The server opens the database read-only and never writes to it at runtime.
 
 `data/bible/` holds the committed public-domain KJV and Arabic Smith–Van Dyke
 JSONL. The Scripture and study routes load these once into memory; they are not
@@ -105,5 +111,6 @@ source URLs, and SHA-256 checksums are in `data/bible/*-source.json` and
 
 - `GET /api/v1/books/:book/chapters/:chapter/scripture` returns every verse with both translations and the commentary section indices that cover it.
 - `GET /api/v1/books/:book/chapters/:chapter/study` returns ordered `verses` blocks and one `commentary` block after each verse range. Use `lang=en|ar|both` and `format=html|markdown|both` for the commentary representation.
+- `GET /api/v1/books/:book/chapters/:chapter/verses/:verse/commentary` returns every split commentary chunk whose range covers one verse. This is the verse-picker endpoint; verses without source commentary return an empty list.
 
 See [docs/API.md](docs/API.md) for the block shape and examples.

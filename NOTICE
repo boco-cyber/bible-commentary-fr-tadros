@@ -17,5 +17,6 @@ are public domain. Both 66-book datasets are sourced from
 https://github.com/midvash/bible-data at revision
 d9fe1779447717bbfcb578e505b893125cad581c. Provenance, source URLs, and checksums
 are in data/bible/kjv-source.json and data/bible/avd-source.json, described in docs/DATA.md.
-Commentary and Scripture are separate works. The New King James Version (NKJV)
-is not included.
+Commentary and Scripture are separate works. Per-verse commentary chunks are a
+mechanical split of the same commentary text for navigation; they do not
+relicense it. The New King James Version (NKJV) is not included.

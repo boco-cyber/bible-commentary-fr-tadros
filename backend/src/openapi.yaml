@@ -14,6 +14,47 @@ tags:
   - { name: Search }
   - { name: References }
 paths:
+  /api/v1/navigation:
+    get:
+      tags: [Catalog]
+      summary: Book, chapter and verse picker with section associations
+      description: Includes all 73 catalog books. Pass book for chapters, and book plus chapter for verse positions and section summaries. Text availability is explicit.
+      parameters:
+        - { name: book, in: query, schema: { type: string } }
+        - { name: chapter, in: query, schema: { type: integer, minimum: 1 } }
+      responses:
+        "200": { description: Catalog and selected location navigation }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /api/v1/resolve:
+    get:
+      tags: [References]
+      summary: Resolve an English or Arabic Bible reference to bilingual verses
+      description: Accepts full book names, catalog abbreviations, source book codes and slugs. Supports a chapter, a single verse or a same-chapter verse range. Arabic-Indic digits are supported. Missing bundled text is null.
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string, maxLength: 200 }, example: "John 3:16-18" }
+      responses:
+        "200": { description: Canonical reference, bilingual verses and API navigation links }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /api/v1/scripture/search:
+    get:
+      tags: [Search]
+      summary: Search indexed Bible words and quoted phrases in KJV or Arabic AVD
+      description: Whole-token matching with AND between terms; double quotes match a phrase. Arabic search normalizes diacritics and letter variants. Results follow canonical book, chapter and verse order.
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string, minLength: 2, maxLength: 200 }, example: '"God so loved"' }
+        - { name: lang, in: query, schema: { type: string, enum: [en, ar], default: en } }
+        - { name: book, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, maximum: 100000, default: 0 } }
+      responses:
+        "200": { description: Matching verses with references, text, translation and pagination }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
   /health:
     get:
       tags: [Meta]
@@ -122,6 +163,26 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/StudyResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /api/v1/books/{book}/chapters/{chapter}/verses/{verse}/commentary:
+    get:
+      tags: [Study]
+      summary: Commentary chunks for a selected verse
+      description: Returns the KJV/AVD verse text and every split commentary chunk covering the selected verse. Verses with no source commentary return an empty list.
+      parameters:
+        - { $ref: "#/components/parameters/Book" }
+        - { name: chapter, in: path, required: true, schema: { type: integer, minimum: 1 } }
+        - { name: verse, in: path, required: true, schema: { type: integer, minimum: 1 } }
+        - { $ref: "#/components/parameters/StudyLang" }
+        - { $ref: "#/components/parameters/Format" }
+      responses:
+        "200":
+          description: Verse text and covering commentary chunks
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VerseCommentaryResponse" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
@@ -345,6 +406,41 @@ components:
                 ar: { $ref: "#/components/schemas/StudyTranslation" }
             blocks: { type: array, items: { $ref: "#/components/schemas/StudyBlock" } }
         meta: { type: object }
+    VerseCommentaryEntry:
+      type: object
+      properties:
+        id: { type: integer }
+        section_id: { type: integer }
+        index: { type: integer }
+        lang: { type: string, enum: [en, ar] }
+        title: { type: object, properties: { en: { type: string }, ar: { type: string } } }
+        verse_start: { type: integer }
+        verse_end: { type: integer }
+        content: { type: object, description: "html and/or markdown for this entry's language." }
+        references: { type: array, items: { type: object } }
+        content_hash: { type: string }
+        url: { type: string, format: uri }
+    VerseCommentaryResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            book: { $ref: "#/components/schemas/Book" }
+            chapter: { $ref: "#/components/schemas/Chapter" }
+            number: { type: integer }
+            text:
+              type: object
+              properties:
+                en: { type: [string, "null"] }
+                ar: { type: [string, "null"] }
+            translations:
+              type: object
+              properties:
+                en: { $ref: "#/components/schemas/StudyTranslation" }
+                ar: { $ref: "#/components/schemas/StudyTranslation" }
+            commentary: { type: array, items: { $ref: "#/components/schemas/VerseCommentaryEntry" } }
+        meta: { type: object }
     MetaResponse:
       type: object
       properties:
@@ -361,6 +457,7 @@ components:
             books: { type: integer }
             books_total: { type: integer }
             sections: { type: integer }
+            chunks: { type: object }
             ref_segments: { type: object }
             dropped_refs: { type: object }
             languages: { type: array, items: { type: string } }

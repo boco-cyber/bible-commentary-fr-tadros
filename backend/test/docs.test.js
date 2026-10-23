@@ -12,10 +12,11 @@ test('OpenAPI document covers all endpoints', async () => {
   const res = await request(app).get('/openapi.json');
   assert.equal(res.status, 200);
   assert.equal(res.body.openapi.startsWith('3.'), true);
-  for (const path of ['/api/v1/meta', '/api/v1/books', '/api/v1/books/{book}',
+  for (const path of ['/api/v1/navigation', '/api/v1/resolve', '/api/v1/scripture/search', '/api/v1/meta', '/api/v1/books', '/api/v1/books/{book}',
     '/api/v1/books/{book}/chapters/{chapter}',
     '/api/v1/books/{book}/chapters/{chapter}/scripture',
     '/api/v1/books/{book}/chapters/{chapter}/study',
+    '/api/v1/books/{book}/chapters/{chapter}/verses/{verse}/commentary',
     '/api/v1/books/{book}/chapters/{chapter}/sections/{index}',
     '/api/v1/sections/{id}', '/api/v1/parallel', '/api/v1/search',
     '/api/v1/references', '/health']) {
@@ -58,6 +59,7 @@ test('OpenAPI documents rate limiting on content routes', async () => {
   for (const path of ['/api/v1/search', '/api/v1/sections/{id}',
     '/api/v1/books/{book}/chapters/{chapter}/scripture',
     '/api/v1/books/{book}/chapters/{chapter}/study',
+    '/api/v1/books/{book}/chapters/{chapter}/verses/{verse}/commentary',
     '/api/v1/books/{book}/chapters/{chapter}/sections/{index}', '/api/v1/parallel']) {
     assert.ok(res.body.paths[path].get.responses['429'], `missing 429 for ${path}`);
   }

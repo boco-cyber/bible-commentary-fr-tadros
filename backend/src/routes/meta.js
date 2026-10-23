@@ -18,6 +18,7 @@ function metaRouter() {
         books: Number(meta.books),
         books_total: Number(meta.books_total),
         sections: Number(meta.sections),
+        chunks: { en: Number(meta.chunks_en), ar: Number(meta.chunks_ar) },
         ref_segments: { en: Number(meta.ref_segments_en), ar: Number(meta.ref_segments_ar) },
         dropped_refs: { en: Number(meta.dropped_refs_en), ar: Number(meta.dropped_refs_ar) },
         languages: ['en', 'ar'],
