@@ -19,6 +19,7 @@ const EXPECTED = {
   schemaVersion: 2,
 };
 const DEFAULT_DATA = path.join(__dirname, '..', '..', 'data');
+const DEFAULT_OUT = path.join(__dirname, '..', 'data', 'commentary.sqlite');
 
 const SCHEMA = `
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -81,7 +82,7 @@ function parseArgs() {
   const out = args.indexOf('--out');
   const data = args.indexOf('--data-dir');
   return {
-    outFile: path.resolve(out >= 0 ? args[out + 1] : path.join(DEFAULT_DATA, 'commentary.sqlite')),
+    outFile: path.resolve(out >= 0 ? args[out + 1] : DEFAULT_OUT),
     dataDir: path.resolve(data >= 0 ? args[data + 1] : DEFAULT_DATA),
   };
 }
