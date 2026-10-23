@@ -125,3 +125,17 @@ notice, excluded-book counts, dropped invalid reference counts, the SHA-256 of
 each committed gzipped source file, the corpus `content_checksum`, and
 `schema_version` 2. `/health` repeats the schema version and checksum so
 deployments can be verified without cached metadata.
+
+### Scripture above commentary
+
+`GET /api/v1/books/:book/chapters/:chapter/scripture` returns every imported
+verse in that chapter, ordered by `number`. Each verse has `text.en`, `text.ar`,
+and `sections` (commentary section indices whose recorded ranges cover it).
+Sections can cover several verses. Verses without commentary remain present
+with an empty `sections` array.
+
+`translations.en` identifies NKJV and `translations.ar` identifies AVD. Status
+is `available`, `source_required`, or `not_found` for the requested chapter.
+Missing text is `null`. Arabic Van Dyke contains 66 books; deuterocanonical text
+and NKJV are not bundled. Commentary ranges retain verse positions when text
+is missing. Introductions (`0`/`intro`) return 400.

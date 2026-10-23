@@ -9,3 +9,12 @@ Notice
 ------
 
 Commentary text is published for use on copticfaith.org with the permission of the rights holder. The repository's MIT license covers code only, not the commentary text.
+
+Bible Scripture data
+-------------------
+Arabic Smith–Van Dyke (1865) is public domain. The 66-book Arabic dataset is
+sourced from https://github.com/midvash/bible-data at revision
+d9fe1779447717bbfcb578e505b893125cad581c. Provenance and source checksums are in
+data/bible/avd-source.json. Commentary and Scripture are separate works.
+NKJV Scripture is not included; the reader reserves its English text positions
+for an authorized NKJV import.

@@ -58,6 +58,50 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
+  /api/v1/books/{book}/chapters/{chapter}/scripture:
+    get:
+      tags: [Sections]
+      summary: Chapter verses with bilingual Scripture text and commentary associations
+      description: Missing text is null. NKJV requires an authorized import. Arabic AVD covers 66 books. Commentary sections may cover multiple verses.
+      parameters:
+        - { $ref: "#/components/parameters/Book" }
+        - { name: chapter, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        "200":
+          description: Ordered chapter verses and translation availability
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      book: { type: string }
+                      chapter: { type: integer }
+                      translations:
+                        type: object
+                        additionalProperties:
+                          type: object
+                          properties:
+                            id: { type: string, enum: [NKJV, AVD] }
+                            name: { type: string }
+                            status: { type: string, enum: [available, source_required, not_found] }
+                      verses:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            number: { type: integer }
+                            text:
+                              type: object
+                              properties:
+                                en: { type: [string, "null"] }
+                                ar: { type: [string, "null"] }
+                            sections: { type: array, items: { type: integer } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
   /api/v1/books/{book}/chapters/{chapter}/sections/{index}:
     get:
       tags: [Sections]

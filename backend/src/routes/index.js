@@ -6,12 +6,14 @@ const { sectionsRouter } = require('./sections');
 const { parallelRouter } = require('./parallel');
 const { referencesRouter } = require('./references');
 const { searchRouter } = require('./search');
+const { scriptureRouter } = require('./scripture');
 
 function apiRouter() {
   const router = express.Router();
   router.use(metaRouter());
   router.use(catalogRouter());
   router.use(chaptersRouter());
+  router.use(scriptureRouter());
   router.use(sectionsRouter());
   router.use(parallelRouter());
   router.use(referencesRouter());

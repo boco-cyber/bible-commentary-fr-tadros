@@ -17,6 +17,7 @@ COPY --chown=appuser:appuser backend/package.json backend/package-lock.json ./ba
 USER appuser
 RUN cd backend && npm ci --omit=dev && npm cache clean --force
 COPY --chown=appuser:appuser backend/src ./backend/src
+COPY --chown=appuser:appuser data/bible ./data/bible
 COPY --chown=appuser:appuser data/catalog.json data/attribution.json ./backend/data/
 COPY --chown=appuser:appuser --from=builder /app/data/commentary.sqlite ./backend/data/commentary.sqlite
 WORKDIR /app/backend

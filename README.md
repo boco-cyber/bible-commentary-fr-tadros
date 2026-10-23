@@ -79,3 +79,27 @@ catalog books before writing `data/`.
 The code is licensed under the MIT License; see [LICENSE](LICENSE). The
 commentary text is not relicensed by the MIT License and remains subject to the
 attribution and permission notice in [NOTICE](NOTICE).
+
+## Bible text for the verse reader
+
+The verse reader uses the Scripture endpoint to show each verse above its
+related commentary. `data/bible/avd.jsonl.gz` contains the same 31,104 Arabic
+Smith–Van Dyke verses previously imported into the prayer backend, normalized
+to this repository's book slugs. Source revision, original book checksums and
+attribution are recorded in `data/bible/avd-source.json`. This edition has 66
+books, so it does not supply the deuterocanonical texts in the commentary catalog.
+
+English Scripture is identified as NKJV and is explicitly unavailable until an
+authorized dataset is imported. To import your licensed JSONL (one verse per
+line with `translation: "NKJV"`, `book_code`, `chapter`, `verse`, `text`):
+
+```bash
+cd backend
+node scripts/import-scripture.js /path/to/licensed-nkjv.jsonl 'Source and license attribution'
+```
+
+The importer validates coordinates and duplicates, records provenance, and
+writes `data/bible/nkjv.jsonl.gz`. Restart/redeploy the API after importing.
+Do not commit licensed text to a public repository unless its license permits
+redistribution. Import validation checks structure, not translation identity,
+licensing rights, or completeness.
