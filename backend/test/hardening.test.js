@@ -70,6 +70,28 @@ test('request logging is disabled when NODE_ENV is test', async () => {
   assert.doesNotMatch(stdout, /GET \/api\/v1\/meta/);
 });
 
+test('5xx responses never expose vendor error codes', async () => {
+  const brokenDb = {
+    prepare() {
+      const error = new Error('malformed database');
+      error.code = 'SQLITE_CORRUPT';
+      throw error;
+    },
+  };
+  const app = createApp(brokenDb, { rateLimitPerMin: 10000, logRequests: false });
+  const original = console.error;
+  console.error = () => {};
+  let res;
+  try {
+    res = await request(app).get('/health');
+  } finally {
+    console.error = original;
+  }
+  assert.equal(res.status, 500);
+  assert.equal(res.body.error.code, 'INTERNAL_ERROR');
+  assert.equal(res.body.error.message, 'Internal server error');
+});
+
 test('large JSON responses are gzip compressed', async () => {
   const app = createApp(db, { rateLimitPerMin: 10000 });
   const res = await request(app)

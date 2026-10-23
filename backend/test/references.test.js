@@ -7,8 +7,8 @@ const DB = process.env.TEST_DB || path.join(__dirname, '.tmp', 'commentary.sqlit
 
 test('reference segments are stored per language', () => {
   const db = openDb(DB);
-  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM section_refs WHERE lang='en'").get().n, 43327);
-  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM section_refs WHERE lang='ar'").get().n, 45235);
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM section_refs WHERE lang='en'").get().n, 43326);
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM section_refs WHERE lang='ar'").get().n, 45234);
   db.close();
 });
 
@@ -19,5 +19,14 @@ test('a known reference is queryable', () => {
   assert.ok(row);
   assert.equal(row.ref_type, 'single');
   assert.ok(row.label.startsWith('Revelation'));
+  assert.equal(db.prepare('SELECT included FROM books WHERE id = ?').get(73).included, 1);
+  db.close();
+});
+
+test('references can target an excluded catalog book', () => {
+  const db = openDb(DB);
+  const book = db.prepare("SELECT id, included FROM books WHERE slug = '2-chronicles'").get();
+  assert.equal(book.included, 0);
+  assert.ok(db.prepare('SELECT COUNT(*) AS n FROM section_refs WHERE book_id = ?').get(book.id).n > 0);
   db.close();
 });

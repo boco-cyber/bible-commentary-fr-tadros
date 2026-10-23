@@ -1,15 +1,24 @@
 const { HttpError } = require('../middleware/errors');
 
 function listBooks(db, testament) {
-  const sql = `SELECT * FROM books ${testament ? 'WHERE testament = ?' : ''} ORDER BY book_number`;
+  const sql = `SELECT * FROM books WHERE included = 1 ${testament ? 'AND testament = ?' : ''} ORDER BY id`;
   return testament ? db.prepare(sql).all(testament) : db.prepare(sql).all();
+}
+
+function findBookAny(db, idOrSlug) {
+  const numeric = /^\d+$/.test(String(idOrSlug));
+  const row = numeric
+    ? db.prepare('SELECT * FROM books WHERE id = ?').get(Number(idOrSlug))
+    : db.prepare('SELECT * FROM books WHERE slug = ?').get(String(idOrSlug));
+  if (!row) throw new HttpError(404, 'NOT_FOUND', 'Book not found');
+  return row;
 }
 
 function findBook(db, idOrSlug) {
   const numeric = /^\d+$/.test(String(idOrSlug));
   const row = numeric
-    ? db.prepare('SELECT * FROM books WHERE id = ?').get(Number(idOrSlug))
-    : db.prepare('SELECT * FROM books WHERE slug = ?').get(String(idOrSlug));
+    ? db.prepare('SELECT * FROM books WHERE included = 1 AND id = ?').get(Number(idOrSlug))
+    : db.prepare('SELECT * FROM books WHERE included = 1 AND slug = ?').get(String(idOrSlug));
   if (!row) throw new HttpError(404, 'NOT_FOUND', 'Book not found');
   return row;
 }
@@ -38,8 +47,11 @@ function findSectionByIndex(db, chapterId, index) {
 }
 
 function listSectionRefs(db, sectionId, lang) {
-  return db.prepare(`SELECT ref_type, book_id, chapter, verse_start, verse_end, label, display, raw_token
-    FROM section_refs WHERE section_id = ? AND lang = ? ORDER BY id`).all(sectionId, lang);
+  return db.prepare(`SELECT r.ref_type, r.book_id, b.slug AS book_slug,
+      b.name_en AS book_name_en, b.name_ar AS book_name_ar,
+      r.chapter, r.verse_start, r.verse_end, r.label, r.display, r.raw_token
+    FROM section_refs r JOIN books b ON b.id = r.book_id
+    WHERE r.section_id = ? AND r.lang = ? ORDER BY r.id`).all(sectionId, lang);
 }
 
 function findReferenceSections(db, { bookId, chapter, verse, lang, limit, offset }) {
@@ -48,14 +60,16 @@ function findReferenceSections(db, { bookId, chapter, verse, lang, limit, offset
     JOIN sections s ON s.id = r.section_id WHERE ${where}`).get(bookId, chapter, verse, verse, lang).n;
   const rows = db.prepare(`SELECT s.id, s.section_index, s.title_en, s.title_ar, s.verse_ranges_json,
       c.number AS chapter_number, b.slug AS book_slug, b.name_en, b.name_ar,
-      r.label, r.display, r.chapter AS ref_chapter, r.verse_start, r.verse_end
+      r.label, r.display, r.chapter AS ref_chapter, r.verse_start, r.verse_end,
+      tb.slug AS target_book_slug, tb.name_en AS target_name_en, tb.name_ar AS target_name_ar
     FROM section_refs r
     JOIN sections s ON s.id = r.section_id
     JOIN chapters c ON c.id = s.chapter_id
     JOIN books b ON b.id = c.book_id
+    JOIN books tb ON tb.id = r.book_id
     WHERE ${where}
     GROUP BY s.id
-    ORDER BY b.book_number, c.number, s.section_index
+    ORDER BY b.id, c.number, s.section_index
     LIMIT ? OFFSET ?`).all(bookId, chapter, verse, verse, lang, limit, offset);
   return { rows, total };
 }
@@ -78,7 +92,7 @@ function searchSections(db, { match, lang, bookId, testament, chapter, limit, of
       c.number AS chapter_number, b.slug AS book_slug, b.name_en, b.name_ar,
       snippet(${table}, 1, '<mark>', '</mark>', '…', 32) AS snippet
     ${from}
-    ORDER BY b.book_number, c.number, s.section_index
+    ORDER BY b.id, c.number, s.section_index
     LIMIT ? OFFSET ?`).all(...params, limit, offset);
   return { rows, total };
 }
@@ -86,6 +100,7 @@ function searchSections(db, { match, lang, bookId, testament, chapter, limit, of
 module.exports = {
   listBooks,
   findBook,
+  findBookAny,
   listChapters,
   findChapter,
   listSectionSummaries,

@@ -1,17 +1,18 @@
 const express = require('express');
-const { findBook, findReferenceSections } = require('../db/queries');
+const { findBookAny, findReferenceSections } = require('../db/queries');
 
 function intParam(value, fallback, min, max) {
   if (value === undefined) return fallback;
+  if (!/^\d+$/.test(String(value))) return null;
   const number = Number(value);
-  return Number.isInteger(number) && number >= min && number <= max ? number : null;
+  return Number.isSafeInteger(number) && number >= min && number <= max ? number : null;
 }
 
 function referencesRouter() {
   const router = express.Router();
   router.get('/references', (req, res) => {
     const db = req.app.locals.db;
-    const book = findBook(db, req.query.book);
+    const book = findBookAny(db, req.query.book);
     const chapter = intParam(req.query.chapter, null, 1, 1000000);
     const verse = intParam(req.query.verse, null, 1, 1000000);
     const lang = req.query.lang || 'en';
@@ -30,6 +31,8 @@ function referencesRouter() {
         index: row.section_index,
         title: { [lang]: lang === 'ar' ? row.title_ar : row.title_en },
         reference: {
+          book_slug: row.target_book_slug,
+          book: { slug: row.target_book_slug, name: { en: row.target_name_en, ar: row.target_name_ar } },
           chapter: row.ref_chapter, verse_start: row.verse_start,
           verse_end: row.verse_end, label: row.label, display: row.display,
         },

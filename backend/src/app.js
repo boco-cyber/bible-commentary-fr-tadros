@@ -51,6 +51,8 @@ function createApp(db, options = {}) {
       body.books = Number(meta.books);
       body.sections = Number(meta.sections);
       body.build = meta.built_at;
+      body.schema_version = Number(meta.schema_version);
+      body.checksum = meta.content_checksum;
     }
     res.json(body);
   });

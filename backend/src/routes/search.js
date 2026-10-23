@@ -9,8 +9,9 @@ function safeSnippet(value) {
 
 function intParam(value, fallback, min, max) {
   if (value === undefined) return fallback;
+  if (!/^\d+$/.test(String(value))) return null;
   const number = Number(value);
-  return Number.isInteger(number) && number >= min && number <= max ? number : null;
+  return Number.isSafeInteger(number) && number >= min && number <= max ? number : null;
 }
 
 function searchRouter() {
@@ -21,7 +22,9 @@ function searchRouter() {
     const limit = intParam(req.query.limit, 20, 1, 50);
     const offset = intParam(req.query.offset, 0, 0, 10000);
     const testament = req.query.testament;
-    const chapter = req.query.chapter === undefined ? undefined : intParam(req.query.chapter, null, 0, 200);
+    const chapter = req.query.chapter === undefined || req.query.chapter === ''
+      ? undefined
+      : intParam(req.query.chapter, null, 0, 200);
     if (q.length < 2 || q.length > 200 || /[\u0000-\u001F\u007F]/.test(q)
         || !['en', 'ar'].includes(lang) || limit === null || offset === null
         || (testament && !['ot', 'nt'].includes(testament)) || chapter === null) {
@@ -34,6 +37,7 @@ function searchRouter() {
     const { rows, total } = searchSections(req.app.locals.db, {
       match, lang, bookId, testament, chapter, limit, offset,
     });
+    const baseUrl = req.app.locals.options.publicBaseUrl;
     res.json({
       data: rows.map((row) => ({
         id: row.id,
@@ -43,6 +47,7 @@ function searchRouter() {
         title: { [lang]: lang === 'ar' ? row.title_ar : row.title_en },
         verse_ranges: JSON.parse(row.verse_ranges_json),
         snippet: safeSnippet(row.snippet),
+        url: `${baseUrl}/api/v1/books/${row.book_slug}/chapters/${row.chapter_number}/sections/${row.section_index}?lang=${lang}`,
       })),
       meta: { lang, query: q, attribution: 'Fr. Tadros Y. Malaty / القمص تادرس يعقوب' },
       pagination: { limit, offset, total },

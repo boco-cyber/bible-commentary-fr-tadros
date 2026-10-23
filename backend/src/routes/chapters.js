@@ -4,8 +4,9 @@ const { chapterDetail } = require('../services/serializer');
 
 function parseChapter(value) {
   if (value === 'intro') return 0;
+  if (!/^\d+$/.test(String(value))) return null;
   const number = Number(value);
-  return Number.isInteger(number) && number >= 0 ? number : null;
+  return Number.isSafeInteger(number) && number >= 0 ? number : null;
 }
 
 function chaptersRouter() {

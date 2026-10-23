@@ -1,13 +1,8 @@
-const crypto = require('node:crypto');
 const express = require('express');
 const { findBook, findChapter, findSectionByIndex, listSectionRefs } = require('../db/queries');
 const { sectionPayload } = require('../services/serializer');
 const { parseChapter } = require('./chapters');
-const { parseFormat } = require('./sections');
-
-function parallelEtag(section, format) {
-  return `"${crypto.createHash('sha256').update(`${section.content_hash}:both:${format}`).digest('hex')}"`;
-}
+const { parseFormat, parseStrictInt, parallelEtag } = require('./sections');
 
 function parallelRouter() {
   const router = express.Router();
@@ -15,9 +10,9 @@ function parallelRouter() {
     const db = req.app.locals.db;
     const book = findBook(db, req.query.book);
     const number = parseChapter(String(req.query.chapter));
-    const index = Number(req.query.index);
+    const index = parseStrictInt(req.query.index);
     const format = parseFormat(req.query.format);
-    if (number === null || !Number.isInteger(index) || !format) {
+    if (number === null || index === null || index < 1 || !format) {
       return res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'Invalid chapter, index, or format' } });
     }
     const chapter = findChapter(db, book.id, number);

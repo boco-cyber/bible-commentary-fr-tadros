@@ -68,6 +68,7 @@ paths:
         - { name: index, in: path, required: true, schema: { type: integer, minimum: 1 } }
         - { $ref: "#/components/parameters/Lang" }
         - { $ref: "#/components/parameters/Format" }
+        - { name: parallel, in: query, description: Return both languages using the same envelope as /parallel, schema: { type: string, enum: ["1"] } }
       responses:
         "200": { description: Section, content: { application/json: { schema: { $ref: "#/components/schemas/SectionResponse" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -81,6 +82,7 @@ paths:
         - { name: id, in: path, required: true, schema: { type: integer } }
         - { $ref: "#/components/parameters/Lang" }
         - { $ref: "#/components/parameters/Format" }
+        - { name: parallel, in: query, description: Return both languages using the same envelope as /parallel, schema: { type: string, enum: ["1"] } }
       responses:
         "200": { description: Section, content: { application/json: { schema: { $ref: "#/components/schemas/SectionResponse" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -183,6 +185,8 @@ components:
         books: { type: integer }
         sections: { type: integer }
         build: { type: string }
+        schema_version: { type: integer }
+        checksum: { type: string }
     Book:
       type: object
       properties:
@@ -224,10 +228,19 @@ components:
           properties:
             name: { type: string }
             attribution: { type: string }
+            author: { type: object }
+            work: { type: object }
+            attribution_notice: { type: string }
+            notice: { type: string }
+            license: { type: string }
             books: { type: integer }
+            books_total: { type: integer }
             sections: { type: integer }
             ref_segments: { type: object }
+            dropped_refs: { type: object }
             languages: { type: array, items: { type: string } }
+            source_sha256: { type: object }
+            content_checksum: { type: string }
             schema_version: { type: integer }
             build: { type: string }
     BookDetailResponse:

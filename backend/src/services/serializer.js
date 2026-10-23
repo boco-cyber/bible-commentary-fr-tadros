@@ -58,6 +58,8 @@ function sectionPayload(row, book, chapter, refs, lang, format, baseUrl) {
     references: refs.map((ref) => ({
       type: ref.ref_type,
       book_id: ref.book_id,
+      book_slug: ref.book_slug,
+      book: { slug: ref.book_slug, name: { en: ref.book_name_en, ar: ref.book_name_ar } },
       chapter: ref.chapter,
       verse_start: ref.verse_start,
       verse_end: ref.verse_end,

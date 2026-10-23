@@ -13,10 +13,12 @@ function notFoundHandler(req, res) {
 function errorHandler(error, req, res, next) {
   if (res.headersSent) return next(error);
   const status = error.status || 500;
-  const code = error.code || 'INTERNAL_ERROR';
-  if (status >= 500) console.error(error);
+  if (status >= 500) {
+    console.error(error.code || 'INTERNAL_ERROR', error.stack || error);
+    return res.status(status).json({ error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } });
+  }
   res.status(status).json({
-    error: { code, message: status >= 500 ? 'Internal server error' : error.message },
+    error: { code: error.code || 'INTERNAL_ERROR', message: error.message },
   });
 }
 

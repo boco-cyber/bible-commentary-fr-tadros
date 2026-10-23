@@ -8,7 +8,16 @@ const { renderMarkdown } = require('../src/services/render');
 const { markdownToPlain } = require('../src/services/plain-text');
 const { normalizeForSearch } = require('../src/services/normalize');
 
-const EXPECTED = { books: 67, sections: 7590 };
+const EXPECTED = {
+  books: 67,
+  catalogBooks: 73,
+  sections: 7590,
+  refSegmentsEn: 43326,
+  refSegmentsAr: 45234,
+  droppedRefsEn: 1,
+  droppedRefsAr: 1,
+  schemaVersion: 2,
+};
 const DEFAULT_DATA = path.join(__dirname, '..', '..', 'data');
 
 const SCHEMA = `
@@ -16,7 +25,8 @@ CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE books (
   id INTEGER PRIMARY KEY, slug TEXT NOT NULL UNIQUE, book_number INTEGER NOT NULL,
   testament TEXT NOT NULL, name_en TEXT NOT NULL, name_ar TEXT NOT NULL,
-  short_en TEXT, short_ar TEXT, chapters_expected INTEGER NOT NULL
+  short_en TEXT, short_ar TEXT, chapters_expected INTEGER NOT NULL,
+  included INTEGER NOT NULL DEFAULT 1
 );
 CREATE TABLE chapters (
   id INTEGER PRIMARY KEY, book_id INTEGER NOT NULL REFERENCES books(id),
@@ -80,6 +90,17 @@ function hashContent(titleEn, titleAr, mdEn, mdAr) {
   return crypto.createHash('sha256').update([titleEn, titleAr, mdEn, mdAr].join('\0')).digest('hex');
 }
 
+function pickTitle(sourceTitle, title, fallback) {
+  for (const value of [sourceTitle, title]) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return fallback;
+}
+
+function sha256File(file) {
+  return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+}
+
 async function loadMap(file) {
   const map = new Map();
   for await (const row of readJsonlGz(file)) {
@@ -93,11 +114,20 @@ async function loadMap(file) {
 
 async function buildDb({ dataDir, outFile }) {
   const catalog = JSON.parse(fs.readFileSync(path.join(dataDir, 'catalog.json'), 'utf8'));
+  const attribution = JSON.parse(fs.readFileSync(path.join(dataDir, 'attribution.json'), 'utf8'));
+  const catalogIds = new Set(catalog.books.map((book) => Number(book.id)));
+  if (catalog.books.length !== EXPECTED.catalogBooks || catalogIds.size !== EXPECTED.catalogBooks) {
+    throw new Error(`Expected ${EXPECTED.catalogBooks} unique catalog books, got ${catalog.books.length}/${catalogIds.size}`);
+  }
   const included = catalog.books.filter((book) => !book.excluded_from_commentary);
   if (included.length !== EXPECTED.books) throw new Error(`Expected ${EXPECTED.books} books, got ${included.length}`);
 
-  const en = await loadMap(path.join(dataDir, 'en', 'sections.jsonl.gz'));
-  const ar = await loadMap(path.join(dataDir, 'ar', 'sections.jsonl.gz'));
+  const enFile = path.join(dataDir, 'en', 'sections.jsonl.gz');
+  const arFile = path.join(dataDir, 'ar', 'sections.jsonl.gz');
+  const sourceShaEn = sha256File(enFile);
+  const sourceShaAr = sha256File(arFile);
+  const en = await loadMap(enFile);
+  const ar = await loadMap(arFile);
   if (en.size !== EXPECTED.sections || ar.size !== EXPECTED.sections) {
     throw new Error(`Expected ${EXPECTED.sections} sections per language, got ${en.size}/${ar.size}`);
   }
@@ -115,8 +145,8 @@ async function buildDb({ dataDir, outFile }) {
     db.exec(SCHEMA);
 
     const insertBook = db.prepare(`INSERT INTO books
-      (id, slug, book_number, testament, name_en, name_ar, short_en, short_ar, chapters_expected)
-      VALUES (@id, @slug, @book_number, @testament, @name_en, @name_ar, @short_en, @short_ar, @chapters_expected)`);
+      (id, slug, book_number, testament, name_en, name_ar, short_en, short_ar, chapters_expected, included)
+      VALUES (@id, @slug, @book_number, @testament, @name_en, @name_ar, @short_en, @short_ar, @chapters_expected, @included)`);
     const insertChapter = db.prepare(`INSERT INTO chapters
       (book_id, number, title_en, title_ar, section_count) VALUES (?, ?, ?, ?, ?)`);
     const insertSection = db.prepare(`INSERT INTO sections
@@ -131,6 +161,8 @@ async function buildDb({ dataDir, outFile }) {
     const insertPlainEn = db.prepare('INSERT INTO sections_plain_en (id, title, body) VALUES (?, ?, ?)');
     const insertPlainAr = db.prepare('INSERT INTO sections_plain_ar (id, title, body) VALUES (?, ?, ?)');
     const refCounts = { en: 0, ar: 0 };
+    const droppedRefs = { en: 0, ar: 0 };
+    const contentHashes = [];
 
     const byBookChapter = new Map();
     for (const [key, row] of en) {
@@ -141,7 +173,8 @@ async function buildDb({ dataDir, outFile }) {
     for (const keys of byBookChapter.values()) keys.sort((a, b) => Number(en.get(a).section_index) - Number(en.get(b).section_index));
 
     const transaction = db.transaction(() => {
-      for (const book of included) {
+      for (const book of catalog.books) {
+        const isIncluded = !book.excluded_from_commentary;
         insertBook.run({
           id: book.id,
           slug: book.path_stem.replace(/^\d+-/, ''),
@@ -152,14 +185,24 @@ async function buildDb({ dataDir, outFile }) {
           short_en: book.englishShortName,
           short_ar: book.shortName,
           chapters_expected: book.chaptersCount,
+          included: isIncluded ? 1 : 0,
         });
+        if (!isIncluded) continue;
 
         for (let number = 0; number <= book.chaptersCount; number += 1) {
           const keys = byBookChapter.get(`${book.id}:${number}`) || [];
-          const first = keys.length ? en.get(keys[0]) : null;
-          const firstAr = keys.length ? ar.get(keys[0]) : null;
-          const titleEn = first ? first.title || `Chapter ${number}` : number === 0 ? 'Introduction' : `Chapter ${number}`;
-          const titleAr = firstAr ? firstAr.title || `الإصحاح ${number}` : number === 0 ? 'مقدمة' : `الإصحاح ${number}`;
+          let firstKey = keys[0];
+          for (const key of keys) {
+            const enSource = String(en.get(key).source_title || '').trim();
+            const arSource = String(ar.get(key).source_title || '').trim();
+            if (enSource || arSource) { firstKey = key; break; }
+          }
+          const first = keys.length ? en.get(firstKey) : null;
+          const firstAr = keys.length ? ar.get(firstKey) : null;
+          const fallbackEn = number === 0 ? 'Introduction' : `Chapter ${number}`;
+          const fallbackAr = number === 0 ? 'مقدمة' : `الإصحاح ${number}`;
+          const titleEn = pickTitle(first?.source_title, first?.title, fallbackEn);
+          const titleAr = pickTitle(firstAr?.source_title, firstAr?.title, fallbackAr);
           const info = insertChapter.run(book.id, number, titleEn, titleAr, keys.length);
           const chapterId = Number(info.lastInsertRowid);
 
@@ -169,31 +212,48 @@ async function buildDb({ dataDir, outFile }) {
             const mdEn = enRow.content_markdown || '';
             const mdAr = arRow.content_markdown || '';
             if (!mdEn || !mdAr) throw new Error(`Empty content for ${key}`);
+            const titleEn = pickTitle(enRow.source_title, enRow.title, '');
+            const titleAr = pickTitle(arRow.source_title, arRow.title, '');
+            const contentHash = hashContent(titleEn, titleAr, mdEn, mdAr);
+            contentHashes.push(`${key}:${contentHash}`);
             const infoSection = insertSection.run(
               key, chapterId, Number(enRow.sequence_number), Number(enRow.section_index), Number(enRow.section_count),
-              enRow.title, arRow.title,
+              titleEn, titleAr,
               enRow.verse_start == null ? null : Number(enRow.verse_start),
               enRow.verse_end == null ? null : Number(enRow.verse_end),
               JSON.stringify(enRow.verse_ranges || []),
               mdEn, mdAr, renderMarkdown(mdEn), renderMarkdown(mdAr),
-              hashContent(enRow.title || '', arRow.title || '', mdEn, mdAr),
+              contentHash,
             );
             if (!infoSection.changes) throw new Error(`Failed to insert ${key}`);
             const sectionId = Number(infoSection.lastInsertRowid);
             for (const [lang, row] of [['en', enRow], ['ar', arRow]]) {
               for (const ref of row.references || []) {
+                const targetBookId = Number(ref.book_id);
                 for (const segment of ref.segments || []) {
+                  const chapter = Number(segment.chapter);
+                  const verseStart = Number(segment.verse_start);
+                  const verseEnd = Number(segment.verse_end);
+                  const valid = catalogIds.has(targetBookId)
+                    && Number.isInteger(chapter) && chapter >= 1
+                    && Number.isInteger(verseStart) && verseStart >= 1
+                    && Number.isInteger(verseEnd) && verseEnd >= verseStart;
+                  if (!valid) {
+                    droppedRefs[lang] += 1;
+                    console.warn(`Dropping invalid ${lang} reference segment ${ref.label || ref.raw_token || ''} in ${key}`);
+                    continue;
+                  }
                   insertRef.run(
-                    sectionId, lang, ref.type || 'single', Number(ref.book_id),
-                    Number(segment.chapter), Number(segment.verse_start), Number(segment.verse_end),
+                    sectionId, lang, ref.type || 'single', targetBookId,
+                    chapter, verseStart, verseEnd,
                     ref.label || '', ref.display_text || ref.label || '', ref.raw_token || '',
                   );
                   refCounts[lang] += 1;
                 }
               }
             }
-            insertPlainEn.run(sectionId, normalizeForSearch(enRow.title || ''), normalizeForSearch(markdownToPlain(mdEn)));
-            insertPlainAr.run(sectionId, normalizeForSearch(arRow.title || ''), normalizeForSearch(markdownToPlain(mdAr)));
+            insertPlainEn.run(sectionId, normalizeForSearch(titleEn), normalizeForSearch(markdownToPlain(mdEn)));
+            insertPlainAr.run(sectionId, normalizeForSearch(titleAr), normalizeForSearch(markdownToPlain(mdAr)));
             inserted += 1;
           }
         }
@@ -201,17 +261,32 @@ async function buildDb({ dataDir, outFile }) {
       if (inserted !== en.size) {
         throw new Error(`Consumed ${inserted} of ${en.size} English sections; sections outside catalog book/chapter ranges were not inserted`);
       }
-      if (refCounts.en !== 43327 || refCounts.ar !== 45235) {
+      if (refCounts.en !== EXPECTED.refSegmentsEn || refCounts.ar !== EXPECTED.refSegmentsAr) {
         throw new Error(`Unexpected reference segment counts: ${refCounts.en}/${refCounts.ar}`);
       }
+      if (droppedRefs.en !== EXPECTED.droppedRefsEn || droppedRefs.ar !== EXPECTED.droppedRefsAr) {
+        throw new Error(`Unexpected dropped reference counts: ${droppedRefs.en}/${droppedRefs.ar}`);
+      }
+      const contentChecksum = crypto.createHash('sha256').update(contentHashes.sort().join('\n')).digest('hex');
       const setMeta = db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)');
-      setMeta.run('schema_version', '1');
+      setMeta.run('schema_version', String(EXPECTED.schemaVersion));
       setMeta.run('built_at', new Date().toISOString());
       setMeta.run('books', String(included.length));
+      setMeta.run('books_total', String(catalog.books.length));
       setMeta.run('sections', String(inserted));
       setMeta.run('ref_segments_en', String(refCounts.en));
       setMeta.run('ref_segments_ar', String(refCounts.ar));
-      setMeta.run('attribution', 'Fr. Tadros Y. Malaty / القمص تادرس يعقوب');
+      setMeta.run('dropped_refs_en', String(droppedRefs.en));
+      setMeta.run('dropped_refs_ar', String(droppedRefs.ar));
+      setMeta.run('source_sha256_en', sourceShaEn);
+      setMeta.run('source_sha256_ar', sourceShaAr);
+      setMeta.run('content_checksum', contentChecksum);
+      setMeta.run('author_en', attribution.author.en);
+      setMeta.run('author_ar', attribution.author.ar);
+      setMeta.run('work_en', attribution.work.en);
+      setMeta.run('work_ar', attribution.work.ar);
+      setMeta.run('attribution_notice', attribution.notice);
+      setMeta.run('attribution', `${attribution.author.en} / ${attribution.author.ar}`);
     });
     transaction();
     db.exec("INSERT INTO sections_fts_en(sections_fts_en) VALUES('rebuild')");
@@ -237,4 +312,4 @@ if (require.main === module) {
     .catch((error) => { console.error(error); process.exit(1); });
 }
 
-module.exports = { buildDb, EXPECTED };
+module.exports = { buildDb, pickTitle, EXPECTED };

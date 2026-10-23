@@ -26,10 +26,20 @@ test('Arabic FTS matches with and without diacritics', () => {
 test('plain bodies contain no markdown or raw markup', () => {
   const db = openDb(DB);
   for (const table of ['sections_plain_en', 'sections_plain_ar']) {
-    const rows = db.prepare(`SELECT id, body FROM ${table}`).all();
+    const rows = db.prepare(`SELECT id, title, body FROM ${table}`).all();
     for (const row of rows) {
-      assert.doesNotMatch(row.body, /\{\{|\}\}|\*\*|^#/m, `${table} id ${row.id} contains markup`);
+      assert.doesNotMatch(row.body, /---|\\|\{\{|\}\}|\*\*|^#/m, `${table} id ${row.id} contains markup`);
+      assert.doesNotMatch(row.title, /---|\\|\{\{|\}\}|\*\*|^#/m, `${table} id ${row.id} title contains markup`);
     }
+  }
+  db.close();
+});
+
+test('horizontal rules and backslash escapes are removed from every plain body', () => {
+  const db = openDb(DB);
+  for (const table of ['sections_plain_en', 'sections_plain_ar']) {
+    assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE body LIKE '%---%'`).get().n, 0);
+    assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE instr(body, '\\') > 0`).get().n, 0);
   }
   db.close();
 });

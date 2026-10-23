@@ -7,9 +7,12 @@ function markdownToPlain(markdown) {
     .replace(/<[^>]+>/g, ' ')
     .replace(/\{\{[^}]*\}/g, ' ')
     .replace(/[{}]/g, ' ')
+    .replace(/\\([\\`*{}\[\]()#+\-.!_>~|])/g, '$1')
+    .replace(/^[ \t|:-]*-{3,}[ \t|:-]*$/gm, ' ')
     .replace(/^\s{0,3}#{1,6}\s*/gm, '')
     .replace(/^\s*[-*+]\s+/gm, '')
     .replace(/^\s*\d+\.\s+/gm, '')
+    .replace(/\\/g, '')
     .replace(/[*_~|>]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();

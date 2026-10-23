@@ -13,19 +13,65 @@ function expectedEtag(hash, lang, format) {
   return `"${crypto.createHash('sha256').update(`${hash}:${lang}:${format}`).digest('hex')}"`;
 }
 
-test('meta describes the corpus', async () => {
+test('meta describes the corpus and its provenance', async () => {
   const res = await request(app).get('/api/v1/meta');
   assert.equal(res.status, 200);
   assert.equal(res.body.data.books, 67);
+  assert.equal(res.body.data.books_total, 73);
   assert.equal(res.body.data.sections, 7590);
   assert.deepEqual(res.body.data.languages, ['en', 'ar']);
   assert.match(res.body.data.attribution, /Tadros/);
+  assert.match(res.body.data.author.ar, /[\u0600-\u06FF]/);
+  assert.equal(res.body.data.work.en, 'Bible Commentary');
+  assert.match(res.body.data.notice, /permission of the rights holder/);
+  assert.match(res.body.data.license, /MIT/);
+  assert.deepEqual(res.body.data.dropped_refs, { en: 1, ar: 1 });
+  assert.match(res.body.data.source_sha256.en, /^[0-9a-f]{64}$/);
+  assert.match(res.body.data.source_sha256.ar, /^[0-9a-f]{64}$/);
+  assert.match(res.body.data.content_checksum, /^[0-9a-f]{64}$/);
+  assert.equal(res.body.data.schema_version, 2);
+  assert.ok(res.body.data.build);
+});
+
+test('meta uses the configured site name', async () => {
+  const custom = createApp(db, { rateLimitPerMin: 10000, siteName: 'Custom Site' });
+  const res = await request(custom).get('/api/v1/meta');
+  assert.equal(res.body.data.name, 'Custom Site');
 });
 
 test('books can be filtered by testament', async () => {
   assert.equal((await request(app).get('/api/v1/books')).body.data.length, 67);
   assert.equal((await request(app).get('/api/v1/books?testament=nt')).body.data.length, 27);
   assert.equal((await request(app).get('/api/v1/books?testament=x')).status, 400);
+});
+
+test('books are ordered by absolute canonical id, not per-testament number', async () => {
+  const books = (await request(app).get('/api/v1/books')).body.data;
+  const slugs = books.map((book) => book.slug);
+  assert.ok(slugs.indexOf('revelation') > slugs.indexOf('malachi'));
+  assert.deepEqual(books.map((book) => book.id), [...books.map((book) => book.id)].sort((a, b) => a - b));
+});
+
+test('excluded catalog books are not listed or addressable as content', async () => {
+  const res = await request(app).get('/api/v1/books');
+  assert.equal(res.body.data.some((book) => book.slug === '2-chronicles'), false);
+  assert.equal((await request(app).get('/api/v1/books/2-chronicles')).status, 404);
+  assert.equal((await request(app).get('/api/v1/books/14')).status, 404);
+});
+
+test('section routes support parallel=1 with representation-specific caching', async () => {
+  const url = '/api/v1/books/genesis/chapters/1/sections/1?parallel=1&format=both';
+  const first = await request(app).get(url);
+  assert.equal(first.status, 200);
+  assert.equal(first.body.data.en.source_id, 'ot_1_1:0');
+  assert.equal(first.body.data.ar.source_id, 'ot_1_1:0');
+  assert.ok(first.body.data.en.content.html.length > 0);
+  assert.ok(first.body.data.ar.content.markdown.length > 0);
+  assert.equal(first.headers.etag, expectedEtag(first.body.data.en.content_hash, 'both', 'both'));
+  assert.equal((await request(app).get(url).set('If-None-Match', first.headers.etag)).status, 304);
+  const markdown = await request(app).get('/api/v1/sections/1?parallel=1&format=markdown');
+  assert.equal(markdown.status, 200);
+  assert.notEqual(markdown.headers.etag, first.headers.etag);
 });
 
 test('book detail lists chapters including the introduction', async () => {
@@ -114,6 +160,21 @@ test('ETags identify the language and format representation', async () => {
 test('unknown chapter and index return 404', async () => {
   assert.equal((await request(app).get('/api/v1/books/genesis/chapters/999')).status, 404);
   assert.equal((await request(app).get('/api/v1/books/genesis/chapters/1/sections/999')).status, 404);
+});
+
+test('numeric route parameters must be plain integers', async () => {
+  for (const path of [
+    '/api/v1/sections/1e2',
+    '/api/v1/sections/0x10',
+    '/api/v1/sections/%201',
+    '/api/v1/books/genesis/chapters/0x1',
+    '/api/v1/books/genesis/chapters/1.0',
+    '/api/v1/books/genesis/chapters/1/sections/1e2',
+    '/api/v1/parallel?book=genesis&chapter=1&index=0x1',
+  ]) {
+    const res = await request(app).get(path);
+    assert.equal(res.status, 400, `${path} returned ${res.status}`);
+  }
 });
 
 test('invalid language and format return 400', async () => {

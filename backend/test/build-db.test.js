@@ -40,6 +40,7 @@ function makeDataDir(t, enRows, arRows) {
   fs.mkdirSync(path.join(dir, 'en'));
   fs.mkdirSync(path.join(dir, 'ar'));
   fs.copyFileSync(CATALOG, path.join(dir, 'catalog.json'));
+  fs.copyFileSync(path.join(path.dirname(CATALOG), 'attribution.json'), path.join(dir, 'attribution.json'));
   writeJsonlGz(path.join(dir, 'en', 'sections.jsonl.gz'), enRows);
   writeJsonlGz(path.join(dir, 'ar', 'sections.jsonl.gz'), arRows);
   return dir;
@@ -57,12 +58,23 @@ function openDescriptorsReferencing(fragment) {
   });
 }
 
-test('build contains all books, sections, and introductions', () => {
+test('build contains all catalog books, included books, sections, and introductions', () => {
   const db = openDb(DB);
-  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM books').get().n, 67);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM books').get().n, 73);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM books WHERE included = 1').get().n, 67);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM books WHERE included = 0').get().n, 6);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM sections').get().n, 7590);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM chapters WHERE number = 0').get().n, 67);
   assert.equal(db.prepare("SELECT section_count AS n FROM chapters c JOIN books b ON b.id=c.book_id WHERE b.slug='genesis' AND c.number=1").get().n, 9);
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM chapters c JOIN books b ON b.id=c.book_id WHERE b.included=0").get().n, 0);
+  db.close();
+});
+
+test('excluded catalog books can be reference targets but have no content', () => {
+  const db = openDb(DB);
+  const row = db.prepare("SELECT id, included FROM books WHERE slug='2-chronicles'").get();
+  assert.equal(row.included, 0);
+  assert.ok(db.prepare('SELECT COUNT(*) AS n FROM section_refs WHERE book_id = ?').get(row.id).n > 0);
   db.close();
 });
 
@@ -74,10 +86,11 @@ test('missing Exodus 36-40 are present but empty', () => {
   db.close();
 });
 
-test('sections contain both languages and safe HTML', () => {
+test('sections contain both languages, localized titles, and safe HTML', () => {
   const db = openDb(DB);
   const row = db.prepare("SELECT * FROM sections WHERE source_record_id='ot_1_1:0'").get();
-  assert.equal(row.title_en, 'Chapter Introduction');
+  assert.equal(row.title_en, 'The Creation of the World');
+  assert.equal(row.title_ar, 'خلقة العالم');
   assert.ok(row.content_md_en.includes('Creation'));
   assert.ok(row.content_md_ar.length > 0);
   assert.ok(row.content_html_en.includes('<p>'));
@@ -86,12 +99,60 @@ test('sections contain both languages and safe HTML', () => {
   db.close();
 });
 
-test('meta records schema and counts', () => {
+test('chapter titles use localized source headings', () => {
+  const db = openDb(DB);
+  const row = db.prepare(`SELECT c.title_en, c.title_ar FROM chapters c
+    JOIN books b ON b.id = c.book_id WHERE b.slug='genesis' AND c.number=1`).get();
+  assert.equal(row.title_en, 'The Creation of the World');
+  assert.equal(row.title_ar, 'خلقة العالم');
+  const arabic = db.prepare("SELECT title_ar FROM chapters WHERE number > 0").all()
+    .filter((chapter) => /[\u0600-\u06FF]/.test(chapter.title_ar || '')).length;
+  assert.ok(arabic > 1000, `expected most non-introduction Arabic titles to contain Arabic, got ${arabic}`);
+  db.close();
+});
+
+test('Arabic section titles preserve non-empty source headings', async () => {
+  const db = openDb(DB);
+  const { readJsonlGz } = require('../scripts/lib/jsonl');
+  const file = path.join(path.dirname(CATALOG), 'ar', 'sections.jsonl.gz');
+  let checked = 0;
+  for await (const row of readJsonlGz(file)) {
+    if (!String(row.source_title || '').trim()) continue;
+    const stored = db.prepare('SELECT title_ar FROM sections WHERE source_record_id = ?').get(row.source_record_id);
+    assert.equal(stored.title_ar, row.source_title.trim());
+    checked += 1;
+  }
+  assert.ok(checked > 5000);
+  db.close();
+});
+
+test('meta records schema, counts, provenance, and checksums', () => {
   const db = openDb(DB);
   const meta = Object.fromEntries(db.prepare('SELECT key, value FROM meta').all().map((r) => [r.key, r.value]));
-  assert.equal(meta.schema_version, '1');
+  assert.equal(meta.schema_version, '2');
   assert.equal(meta.sections, '7590');
   assert.equal(meta.books, '67');
+  assert.equal(meta.books_total, '73');
+  assert.equal(meta.ref_segments_en, '43326');
+  assert.equal(meta.ref_segments_ar, '45234');
+  assert.equal(meta.dropped_refs_en, '1');
+  assert.equal(meta.dropped_refs_ar, '1');
+  assert.match(meta.source_sha256_en, /^[0-9a-f]{64}$/);
+  assert.match(meta.source_sha256_ar, /^[0-9a-f]{64}$/);
+  assert.match(meta.content_checksum, /^[0-9a-f]{64}$/);
+  assert.equal(meta.author_en, 'Fr. Tadros Y. Malaty');
+  assert.match(meta.author_ar, /[\u0600-\u06FF]/);
+  assert.equal(meta.work_en, 'Bible Commentary');
+  assert.match(meta.attribution_notice, /permission of the rights holder/);
+  db.close();
+});
+
+test('invalid reference segments are dropped rather than stored', () => {
+  const db = openDb(DB);
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM section_refs WHERE chapter = 4 AND verse_start = 0").get().n, 0);
+  const meta = Object.fromEntries(db.prepare('SELECT key, value FROM meta').all().map((r) => [r.key, r.value]));
+  assert.equal(meta.dropped_refs_en, '1');
+  assert.equal(meta.dropped_refs_ar, '1');
   db.close();
 });
 
@@ -111,6 +172,13 @@ test('build rejects duplicate source_record_id instead of silently deduplicating
     /Duplicate source_record_id test_1 in .*sections\.jsonl\.gz/,
   );
   assert.equal(fs.existsSync(outFile), false);
+});
+
+test('pickTitle prefers source_title, then title, then fallback', () => {
+  const { pickTitle } = require('../scripts/build-db');
+  assert.equal(pickTitle('  Localized  ', 'Placeholder', 'Fallback'), 'Localized');
+  assert.equal(pickTitle('', '  Placeholder ', 'Fallback'), 'Placeholder');
+  assert.equal(pickTitle('   ', '', 'Fallback'), 'Fallback');
 });
 
 test('build rejects unconsumed sections and preserves the old output', async (t) => {
