@@ -26,3 +26,35 @@ test('Swagger UI is served', async () => {
   assert.equal(res.status, 200);
   assert.match(res.text, /swagger-ui/i);
 });
+
+test('catalog and meta responses are cached for an hour', async () => {
+  for (const path of ['/api/v1/meta', '/api/v1/books', '/api/v1/books/genesis',
+    '/api/v1/books/genesis/chapters/1']) {
+    const res = await request(app).get(path);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers['cache-control'], 'public, max-age=3600');
+  }
+});
+
+test('parallel responses have representation-specific ETags and honor If-None-Match', async () => {
+  const url = '/api/v1/parallel?book=genesis&chapter=1&index=1';
+  const first = await request(app).get(url);
+  assert.equal(first.status, 200);
+  assert.ok(first.headers.etag);
+  assert.match(first.headers['cache-control'], /immutable/);
+
+  const cached = await request(app).get(url).set('If-None-Match', first.headers.etag);
+  assert.equal(cached.status, 304);
+
+  const markdown = await request(app).get(`${url}&format=markdown`);
+  assert.equal(markdown.status, 200);
+  assert.notEqual(markdown.headers.etag, first.headers.etag);
+});
+
+test('OpenAPI documents rate limiting on content routes', async () => {
+  const res = await request(app).get('/openapi.json');
+  for (const path of ['/api/v1/search', '/api/v1/sections/{id}',
+    '/api/v1/books/{book}/chapters/{chapter}/sections/{index}', '/api/v1/parallel']) {
+    assert.ok(res.body.paths[path].get.responses['429'], `missing 429 for ${path}`);
+  }
+});

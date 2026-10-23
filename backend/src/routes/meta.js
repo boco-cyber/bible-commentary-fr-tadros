@@ -5,6 +5,7 @@ function metaRouter() {
   router.get('/meta', (req, res) => {
     const db = req.app.locals.db;
     const meta = Object.fromEntries(db.prepare('SELECT key, value FROM meta').all().map((row) => [row.key, row.value]));
+    res.set('Cache-Control', 'public, max-age=3600');
     res.json({
       data: {
         name: 'Bible Commentary — Fr. Tadros Y. Malaty',

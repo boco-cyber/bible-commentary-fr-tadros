@@ -10,12 +10,14 @@ function catalogRouter() {
     if (testament && !['ot', 'nt'].includes(testament)) {
       return res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'testament must be ot or nt' } });
     }
+    res.set('Cache-Control', 'public, max-age=3600');
     res.json({ data: listBooks(req.app.locals.db, testament).map(bookSummary) });
   });
 
   router.get('/books/:book', (req, res) => {
     const db = req.app.locals.db;
     const book = findBook(db, req.params.book);
+    res.set('Cache-Control', 'public, max-age=3600');
     res.json({ data: bookDetail(book, listChapters(db, book.id)) });
   });
 

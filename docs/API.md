@@ -26,7 +26,6 @@ Errors are returned as JSON:
 | `404` | Unknown book, chapter, section, verse, or no matching results |
 | `429` | Rate limit exceeded; respects `Retry-After` |
 | `500` | Internal server error |
-| `503` | Database unavailable |
 
 ## Examples
 

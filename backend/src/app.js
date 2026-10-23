@@ -6,6 +6,7 @@ const swaggerUi = require('swagger-ui-express');
 const config = require('./config');
 const { apiRouter } = require('./routes');
 const { notFoundHandler, errorHandler } = require('./middleware/errors');
+const { createRateLimiter } = require('./middleware/rate-limit');
 
 const openapi = yaml.load(fs.readFileSync(path.join(__dirname, 'openapi.yaml'), 'utf8'));
 
@@ -13,8 +14,10 @@ function createApp(db, options = {}) {
   const app = express();
   app.disable('x-powered-by');
   app.set('etag', false);
+  app.set('trust proxy', 1);
   app.locals.db = db;
   app.locals.options = { ...config, ...options };
+  app.use(createRateLimiter(app.locals.options.rateLimitPerMin));
 
   app.get('/health', (req, res) => {
     const body = { status: 'ok', service: 'bible-commentary-fr-tadros' };

@@ -1,8 +1,13 @@
+const crypto = require('node:crypto');
 const express = require('express');
 const { findBook, findChapter, findSectionByIndex, listSectionRefs } = require('../db/queries');
 const { sectionPayload } = require('../services/serializer');
 const { parseChapter } = require('./chapters');
 const { parseFormat } = require('./sections');
+
+function parallelEtag(section, format) {
+  return `"${crypto.createHash('sha256').update(`${section.content_hash}:both:${format}`).digest('hex')}"`;
+}
 
 function parallelRouter() {
   const router = express.Router();
@@ -22,7 +27,11 @@ function parallelRouter() {
     const make = (lang) => sectionPayload(
       section, book, chapter, listSectionRefs(db, section.id, lang), lang, format, baseUrl,
     );
+    const etag = parallelEtag(section, format);
+    res.set('ETag', etag);
     res.set('Cache-Control', 'public, max-age=86400, immutable');
+    res.set('Vary', 'Accept-Encoding');
+    if (req.headers['if-none-match'] === etag) return res.status(304).end();
     res.json({ data: { en: make('en'), ar: make('ar') }, meta: { attribution: 'Fr. Tadros Y. Malaty / القمص تادرس يعقوب' } });
   });
   return router;

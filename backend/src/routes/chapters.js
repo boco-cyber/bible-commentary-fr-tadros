@@ -18,6 +18,7 @@ function chaptersRouter() {
       return res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'Invalid chapter' } });
     }
     const chapter = findChapter(db, book.id, number);
+    res.set('Cache-Control', 'public, max-age=3600');
     res.json({ data: chapterDetail(book, chapter, listSectionSummaries(db, chapter.id)) });
   });
   return router;
