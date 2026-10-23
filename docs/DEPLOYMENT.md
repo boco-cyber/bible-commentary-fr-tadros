@@ -50,10 +50,11 @@ Configure these repository secrets for the deploy workflow:
 | `COOLIFY_API_TOKEN` | Coolify API token with deploy permission |
 | `COOLIFY_APP_UUID` | UUID of the Coolify application |
 
-Optional repository variable:
+Optional repository variables:
 
 | Variable | Purpose |
 |---|---|
+| `PRODUCTION_RESOLVE` | `curl --resolve` for the public API origin, e.g. `commentary.copticfaith.org:443:163.192.16.13`, when Cloudflare blocks GitHub health checks |
 | `COOLIFY_RESOLVE` | `curl --resolve` value such as `hub.copticfaith.org:443:163.192.16.13`, used to bypass Cloudflare Bot Fight Mode during deployment |
 
 The workflow runs the test suite and database build before triggering a

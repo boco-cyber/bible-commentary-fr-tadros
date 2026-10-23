@@ -1,3 +1,4 @@
+const { commentaryAvailability } = require('./availability');
 const { bookSummary, referencePayload } = require('./serializer');
 
 function languages(lang) {
@@ -85,6 +86,7 @@ function buildStudy({ book, chapter, scripture, sections, refs, lang, format, ba
       title: { en: chapter.title_en, ar: chapter.title_ar },
       section_count: chapter.section_count,
       available: chapter.section_count > 0,
+      commentary: commentaryAvailability(sections.length > 0),
     },
     translations: scripture.translations,
     blocks,

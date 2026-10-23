@@ -269,3 +269,34 @@ All navigation results distinguish missing Scripture text from missing commentar
 Schema version 4 adds `scripture_verses` (62,206 rows) and its SQLite FTS5 index,
 rebuilt from committed KJV/AVD sources with the database. Runtime access stays read-only.
 Rebuild the database before starting this version; there is no live migration.
+
+
+## Source-faithful commentary availability
+
+Chapter and book chapter-list entries now include `commentary: {available, status, message}`.
+Missing source chapters (Exodus 36–40) have no sections and return the bilingual message
+`No commentary available` / `لا يوجد تفسير متاح`. Navigation exposes the same status.
+
+The verse commentary endpoint separates:
+
+- `commentary`: only comments individually identified for the selected verse.
+- `shared_commentary`: original source text mapped to a verse range, or the full source
+  section when no individual marker identifies this verse. Items have stable IDs and
+  `scope: range|section`; websites should deduplicate by ID when combining verse requests.
+- `commentary_status[lang]`: individual availability. `shared_only` means there is shared
+  source context but no separately identified verse comment. Its message says
+  `No verse-specific commentary available`.
+- `source_commentary_status[lang]`: whether either individual or shared source text exists.
+  When neither exists the message is `No commentary available`.
+
+A verse marker does not authorize extending its comment to following unmarked verses.
+Sections without inline boundaries retain their original source range as shared context.
+Full source text remains accessible through chapter study and section endpoints.
+Repeated generated `Chapter Introduction` headings are replaced by localized chapter
+labels; genuine source headings are preserved. These changes apply during every database
+build across both languages. Mutable catalog and commentary URLs now require cache
+revalidation rather than declaring corrected content immutable.
+
+Run `node backend/scripts/audit-commentary.js` to audit all committed records. Add
+`--source-dir /path/to/extracted` to compare text, source headings and ranges against the
+original extraction. The full audit is committed in `docs/commentary-audit.json`.

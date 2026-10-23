@@ -1,3 +1,4 @@
+const { commentaryAvailability } = require('../services/availability');
 const crypto = require('node:crypto');
 const express = require('express');
 const {
@@ -41,13 +42,14 @@ function verseCommentaryRouter() {
 
     const langs = lang === 'both' ? ['en', 'ar'] : [lang];
     const baseUrl = req.app.locals.options.publicBaseUrl;
-    const commentary = [];
+    let commentary = [];
     for (const language of langs) {
       const chunks = findVerseChunks(db, { bookId: book.id, chapter: chapterNumber, verse, lang: language });
       for (const chunk of chunks) {
         commentary.push({
           id: chunk.id,
           section_id: chunk.section_id,
+          scope: chunk.verse_start === chunk.verse_end ? 'verse' : 'range',
           index: chunk.section_index,
           lang: language,
           title: { en: chunk.title_en, ar: chunk.title_ar },
@@ -57,6 +59,25 @@ function verseCommentaryRouter() {
           references: listSectionRefs(db, chunk.section_id, language).map(referencePayload),
           content_hash: chunk.content_hash,
           url: `${baseUrl}/api/v1/sections/${chunk.section_id}`,
+        });
+      }
+    }
+
+    // Preserve original shared source context without claiming it is verse-specific.
+    const sharedCommentary = commentary.filter((entry) => entry.scope === 'range');
+    commentary = commentary.filter((entry) => entry.scope === 'verse');
+    for (const language of langs) {
+      for (const section of sections) {
+        if ([...commentary, ...sharedCommentary].some((entry) => entry.lang === language && entry.section_id === section.id)) continue;
+        const ranges = JSON.parse(section.verse_ranges_json);
+        if (!ranges.some(([start, end]) => verse >= start && verse <= end)) continue;
+        const content = {};
+        if (format === 'markdown' || format === 'both') content.markdown = section[`content_md_${language}`];
+        if (format === 'html' || format === 'both') content.html = section[`content_html_${language}`];
+        sharedCommentary.push({
+          id: `section:${section.id}:${language}`, section_id: section.id, lang: language,
+          scope: 'section', verse_ranges: ranges, title: { en: section.title_en, ar: section.title_ar },
+          content, url: `${baseUrl}/api/v1/sections/${section.id}`,
         });
       }
     }
@@ -75,6 +96,17 @@ function verseCommentaryRouter() {
         text: verseData.text,
         translations: scripture.translations,
         commentary,
+        shared_commentary: sharedCommentary,
+        source_commentary_status: Object.fromEntries(langs.map((language) => [language,
+          commentaryAvailability(commentary.some((entry) => entry.lang === language) || sharedCommentary.some((entry) => entry.lang === language)),
+        ])),
+        commentary_status: Object.fromEntries(langs.map((language) => [language,
+          commentary.some((entry) => entry.lang === language)
+            ? commentaryAvailability(true)
+            : sharedCommentary.some((entry) => entry.lang === language)
+              ? { available: false, status: 'shared_only', message: { en: 'No verse-specific commentary available', ar: 'لا يوجد تفسير خاص بهذه الآية' } }
+              : commentaryAvailability(false),
+        ])),
       },
       meta: {
         lang,
@@ -85,7 +117,7 @@ function verseCommentaryRouter() {
     };
     const etag = `"${crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex')}"`;
     res.set('ETag', etag);
-    res.set('Cache-Control', 'public, max-age=86400, immutable');
+    res.set('Cache-Control', 'public, max-age=0, must-revalidate');
     res.set('Vary', 'Accept-Encoding');
     if (req.headers['if-none-match'] === etag) return res.status(304).end();
     return res.json(payload);

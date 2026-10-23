@@ -98,11 +98,11 @@ test('study returns verses without commentary for source gaps', async () => {
   assert.ok(data.blocks[0].verses.every((verse) => verse.text.en && verse.text.ar));
 });
 
-test('study sets immutable cache headers and supports ETag revalidation', async () => {
+test('study requires cache revalidation and supports ETag revalidation', async () => {
   const first = await request(app).get('/api/v1/books/john/chapters/3/study?lang=en&format=html');
   assert.equal(first.status, 200);
   assert.match(first.headers['cache-control'], /public/);
-  assert.match(first.headers['cache-control'], /immutable/);
+  assert.match(first.headers['cache-control'], /must-revalidate/);
   assert.ok(first.headers.etag);
   const second = await request(app)
     .get('/api/v1/books/john/chapters/3/study?lang=en&format=html')

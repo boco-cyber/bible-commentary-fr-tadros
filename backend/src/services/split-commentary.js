@@ -98,12 +98,12 @@ function splitCommentary(markdown, verseStart, verseEnd) {
   const markers = findMarkers(body, verseStart, verseEnd);
   const chunks = [];
 
-  if (markers.length >= 2) {
+  if (markers.length >= 1) {
     for (let index = 0; index < markers.length; index += 1) {
       const start = index === 0 ? 0 : markers[index].boundaryStart;
       const end = index + 1 < markers.length ? markers[index + 1].boundaryStart : body.length;
-      const rangeStart = index === 0 ? verseStart : markers[index].verse;
-      const rangeEnd = index + 1 < markers.length ? markers[index + 1].verse - 1 : verseEnd;
+      const rangeStart = markers[index].verse;
+      const rangeEnd = rangeStart;
       chunks.push({
         verseStart: rangeStart,
         verseEnd: Math.max(rangeStart, rangeEnd),
@@ -114,21 +114,10 @@ function splitCommentary(markdown, verseStart, verseEnd) {
     chunks.push({ verseStart, verseEnd, markdown: cleanChunk(body, verseStart, verseEnd) });
   }
 
-  const result = [];
-  let expected = verseStart;
-  for (const chunk of chunks) {
-    if (!chunk.markdown) {
-      if (result.length) result[result.length - 1].verseEnd = chunk.verseEnd;
-      continue;
-    }
-    if (chunk.verseStart > expected) chunk.verseStart = expected;
-    result.push(chunk);
-    expected = chunk.verseEnd + 1;
-  }
-  if (!result.length) return [{ verseStart, verseEnd, markdown: cleanChunk(body, verseStart, verseEnd) }];
-  if (result[0].verseStart > verseStart) result[0].verseStart = verseStart;
-  if (result[result.length - 1].verseEnd < verseEnd) result[result.length - 1].verseEnd = verseEnd;
-  return result;
+  // A marker identifies only its own verse. Never carry it over unmarked gaps.
+  // Sections without inline markers retain their explicit source range as shared context.
+  return chunks.filter((chunk) => chunk.markdown);
+
 }
 
 module.exports = { splitCommentary };

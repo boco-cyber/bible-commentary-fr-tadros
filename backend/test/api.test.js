@@ -112,7 +112,7 @@ test('section by chapter and index returns content and refs', async () => {
   assert.ok(res.body.data.content.markdown.length > 0);
   assert.ok(Array.isArray(res.body.data.references));
   assert.equal(res.headers.etag, expectedEtag(res.body.data.content_hash, 'en', 'both'));
-  assert.match(res.headers['cache-control'], /immutable/);
+  assert.match(res.headers['cache-control'], /must-revalidate/);
 });
 
 test('section defaults to html only', async () => {

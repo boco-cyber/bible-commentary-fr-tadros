@@ -168,9 +168,9 @@ paths:
         "429": { $ref: "#/components/responses/TooManyRequests" }
   /api/v1/books/{book}/chapters/{chapter}/verses/{verse}/commentary:
     get:
+      description: The commentary array contains only individually identified verse comments. Shared range or section context is returned separately in shared_commentary with stable IDs for deduplication. commentary_status reports individual availability per language; source_commentary_status includes shared source context. Missing source content reports No commentary available. Unmarked gaps are never filled from neighboring verse comments.
       tags: [Study]
       summary: Commentary chunks for a selected verse
-      description: Returns the KJV/AVD verse text and every split commentary chunk covering the selected verse. Verses with no source commentary return an empty list.
       parameters:
         - { $ref: "#/components/parameters/Book" }
         - { name: chapter, in: path, required: true, schema: { type: integer, minimum: 1 } }
@@ -406,12 +406,23 @@ components:
                 ar: { $ref: "#/components/schemas/StudyTranslation" }
             blocks: { type: array, items: { $ref: "#/components/schemas/StudyBlock" } }
         meta: { type: object }
+    CommentaryAvailability:
+      type: object
+      properties:
+        available: { type: boolean }
+        status: { type: string, enum: [available, not_available, shared_only] }
+        message:
+          type: [object, "null"]
+          properties:
+            en: { type: string }
+            ar: { type: string }
     VerseCommentaryEntry:
       type: object
       properties:
         id: { type: integer }
         section_id: { type: integer }
         index: { type: integer }
+        scope: { type: string, enum: [verse, range] }
         lang: { type: string, enum: [en, ar] }
         title: { type: object, properties: { en: { type: string }, ar: { type: string } } }
         verse_start: { type: integer }
@@ -440,6 +451,23 @@ components:
                 en: { $ref: "#/components/schemas/StudyTranslation" }
                 ar: { $ref: "#/components/schemas/StudyTranslation" }
             commentary: { type: array, items: { $ref: "#/components/schemas/VerseCommentaryEntry" } }
+            shared_commentary:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: [integer, string] }
+                  section_id: { type: integer }
+                  lang: { type: string, enum: [en, ar] }
+                  scope: { type: string, enum: [range, section] }
+                  content: { type: object }
+                  url: { type: string, format: uri }
+            commentary_status:
+              type: object
+              additionalProperties: { $ref: "#/components/schemas/CommentaryAvailability" }
+            source_commentary_status:
+              type: object
+              additionalProperties: { $ref: "#/components/schemas/CommentaryAvailability" }
         meta: { type: object }
     MetaResponse:
       type: object
