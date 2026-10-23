@@ -57,6 +57,7 @@ function createApp(db, options = {}) {
     res.json(body);
   });
 
+  app.get('/', (req, res) => res.redirect('/docs/'));
   app.get('/openapi.json', (req, res) => res.json(openapi));
   app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapi));
 
