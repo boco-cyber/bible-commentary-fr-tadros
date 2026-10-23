@@ -29,4 +29,26 @@ function listSectionSummaries(db, chapterId) {
     FROM sections WHERE chapter_id = ? ORDER BY sequence_number`).all(chapterId);
 }
 
-module.exports = { listBooks, findBook, listChapters, findChapter, listSectionSummaries };
+function findSectionById(db, id) {
+  return db.prepare('SELECT * FROM sections WHERE id = ?').get(Number(id)) || null;
+}
+
+function findSectionByIndex(db, chapterId, index) {
+  return db.prepare('SELECT * FROM sections WHERE chapter_id = ? AND section_index = ?').get(chapterId, index) || null;
+}
+
+function listSectionRefs(db, sectionId, lang) {
+  return db.prepare(`SELECT ref_type, book_id, chapter, verse_start, verse_end, label, display, raw_token
+    FROM section_refs WHERE section_id = ? AND lang = ? ORDER BY id`).all(sectionId, lang);
+}
+
+module.exports = {
+  listBooks,
+  findBook,
+  listChapters,
+  findChapter,
+  listSectionSummaries,
+  findSectionById,
+  findSectionByIndex,
+  listSectionRefs,
+};

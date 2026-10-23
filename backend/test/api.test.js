@@ -51,3 +51,38 @@ test('unknown book returns 404 JSON', async () => {
   assert.equal(res.status, 404);
   assert.equal(res.body.error.code, 'NOT_FOUND');
 });
+
+test('section by chapter and index returns content and refs', async () => {
+  const res = await request(app).get('/api/v1/books/genesis/chapters/1/sections/1?lang=en');
+  assert.equal(res.status, 200);
+  assert.equal(res.body.data.source_id, 'ot_1_1:0');
+  assert.ok(res.body.data.content.html.includes('<p>'));
+  assert.ok(res.body.data.content.markdown.length > 0);
+  assert.ok(Array.isArray(res.body.data.references));
+  assert.equal(res.headers.etag, `"${res.body.data.content_hash}"`);
+  assert.match(res.headers['cache-control'], /immutable/);
+});
+
+test('section supports markdown-only and Arabic responses', async () => {
+  const res = await request(app).get('/api/v1/sections/1?lang=ar&format=markdown');
+  assert.equal(res.status, 200);
+  assert.equal(res.body.data.content.html, undefined);
+  assert.ok(res.body.data.content.markdown.length > 0);
+  assert.equal(res.body.data.lang, 'ar');
+});
+
+test('matching If-None-Match returns 304', async () => {
+  const first = await request(app).get('/api/v1/sections/1');
+  const second = await request(app).get('/api/v1/sections/1').set('If-None-Match', first.headers.etag);
+  assert.equal(second.status, 304);
+});
+
+test('unknown chapter and index return 404', async () => {
+  assert.equal((await request(app).get('/api/v1/books/genesis/chapters/999')).status, 404);
+  assert.equal((await request(app).get('/api/v1/books/genesis/chapters/1/sections/999')).status, 404);
+});
+
+test('invalid language and format return 400', async () => {
+  assert.equal((await request(app).get('/api/v1/sections/1?lang=fr')).status, 400);
+  assert.equal((await request(app).get('/api/v1/sections/1?format=pdf')).status, 400);
+});
