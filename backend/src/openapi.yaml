@@ -1,0 +1,258 @@
+openapi: 3.1.0
+info:
+  title: Bible Commentary — Fr. Tadros Y. Malaty
+  version: "1.0.0"
+  description: Public read-only bilingual commentary API. No authentication.
+servers:
+  - url: https://commentary.copticfaith.org
+  - url: http://localhost:3000
+tags:
+  - { name: Meta }
+  - { name: Catalog }
+  - { name: Sections }
+  - { name: Search }
+  - { name: References }
+paths:
+  /health:
+    get:
+      tags: [Meta]
+      summary: Liveness and corpus counts
+      responses:
+        "200": { description: Healthy, content: { application/json: { schema: { $ref: "#/components/schemas/Health" } } } }
+  /api/v1/meta:
+    get:
+      tags: [Meta]
+      summary: Corpus metadata and attribution
+      responses:
+        "200": { description: Metadata, content: { application/json: { schema: { $ref: "#/components/schemas/MetaResponse" } } } }
+  /api/v1/books:
+    get:
+      tags: [Catalog]
+      summary: List books
+      parameters:
+        - { name: testament, in: query, schema: { type: string, enum: [ot, nt] } }
+      responses:
+        "200": { description: Books, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/Book" } } } } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+  /api/v1/books/{book}:
+    get:
+      tags: [Catalog]
+      summary: Book detail with chapter list
+      parameters: [{ $ref: "#/components/parameters/Book" }]
+      responses:
+        "200": { description: Book, content: { application/json: { schema: { $ref: "#/components/schemas/BookDetailResponse" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/books/{book}/chapters/{chapter}:
+    get:
+      tags: [Catalog]
+      summary: Chapter detail and section summaries
+      parameters:
+        - { $ref: "#/components/parameters/Book" }
+        - { name: chapter, in: path, required: true, schema: { type: string, examples: ["1", intro] } }
+      responses:
+        "200": { description: Chapter, content: { application/json: { schema: { $ref: "#/components/schemas/ChapterResponse" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/books/{book}/chapters/{chapter}/sections/{index}:
+    get:
+      tags: [Sections]
+      summary: Section by chapter and index
+      parameters:
+        - { $ref: "#/components/parameters/Book" }
+        - { name: chapter, in: path, required: true, schema: { type: string } }
+        - { name: index, in: path, required: true, schema: { type: integer, minimum: 1 } }
+        - { $ref: "#/components/parameters/Lang" }
+        - { $ref: "#/components/parameters/Format" }
+      responses:
+        "200": { description: Section, content: { application/json: { schema: { $ref: "#/components/schemas/SectionResponse" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/sections/{id}:
+    get:
+      tags: [Sections]
+      summary: Section by id
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { $ref: "#/components/parameters/Lang" }
+        - { $ref: "#/components/parameters/Format" }
+      responses:
+        "200": { description: Section, content: { application/json: { schema: { $ref: "#/components/schemas/SectionResponse" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/parallel:
+    get:
+      tags: [Sections]
+      summary: Same section in English and Arabic
+      parameters:
+        - { $ref: "#/components/parameters/BookQuery" }
+        - { name: chapter, in: query, required: true, schema: { type: string } }
+        - { name: index, in: query, required: true, schema: { type: integer, minimum: 1 } }
+        - { $ref: "#/components/parameters/Format" }
+      responses:
+        "200": { description: Parallel section, content: { application/json: { schema: { $ref: "#/components/schemas/ParallelResponse" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/search:
+    get:
+      tags: [Search]
+      summary: Bilingual full-text search
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string, minLength: 2, maxLength: 200 } }
+        - { $ref: "#/components/parameters/Lang" }
+        - { name: book, in: query, schema: { type: string } }
+        - { name: testament, in: query, schema: { type: string, enum: [ot, nt] } }
+        - { name: chapter, in: query, schema: { type: integer, minimum: 0 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, maximum: 10000, default: 0 } }
+      responses:
+        "200": { description: Hits, content: { application/json: { schema: { $ref: "#/components/schemas/SearchResponse" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+  /api/v1/references:
+    get:
+      tags: [References]
+      summary: Sections citing a verse
+      parameters:
+        - { $ref: "#/components/parameters/BookQuery" }
+        - { name: chapter, in: query, required: true, schema: { type: integer, minimum: 1 } }
+        - { name: verse, in: query, required: true, schema: { type: integer, minimum: 1 } }
+        - { $ref: "#/components/parameters/Lang" }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, maximum: 10000, default: 0 } }
+      responses:
+        "200": { description: Sections, content: { application/json: { schema: { $ref: "#/components/schemas/ReferenceResponse" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+components:
+  parameters:
+    Book:
+      name: book
+      in: path
+      required: true
+      schema: { type: string, examples: [genesis] }
+    BookQuery:
+      name: book
+      in: query
+      required: true
+      schema: { type: string, examples: [genesis] }
+    Lang:
+      name: lang
+      in: query
+      schema: { type: string, enum: [en, ar], default: en }
+    Format:
+      name: format
+      in: query
+      schema: { type: string, enum: [html, markdown, both], default: html }
+  responses:
+    NotFound:
+      description: Not found
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    BadRequest:
+      description: Bad request
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+    Health:
+      type: object
+      properties:
+        status: { type: string }
+        service: { type: string }
+        books: { type: integer }
+        sections: { type: integer }
+        build: { type: string }
+    Book:
+      type: object
+      properties:
+        id: { type: integer }
+        slug: { type: string }
+        book_number: { type: integer }
+        testament: { type: string, enum: [ot, nt] }
+        name: { type: object, properties: { en: { type: string }, ar: { type: string } } }
+        short: { type: object, properties: { en: { type: string }, ar: { type: string } } }
+        chapters_expected: { type: integer }
+    Chapter:
+      type: object
+      properties:
+        number: { type: integer }
+        title: { type: object }
+        section_count: { type: integer }
+        available: { type: boolean }
+    Section:
+      type: object
+      properties:
+        id: { type: integer }
+        source_id: { type: string }
+        lang: { type: string, enum: [en, ar] }
+        book: { $ref: "#/components/schemas/Book" }
+        chapter: { type: object }
+        index: { type: integer }
+        section_count: { type: integer }
+        title: { type: object }
+        verse_ranges: { type: array, items: { type: object } }
+        content: { type: object, properties: { html: { type: string }, markdown: { type: string } } }
+        references: { type: array, items: { type: object } }
+        content_hash: { type: string }
+        url: { type: string }
+    MetaResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            name: { type: string }
+            attribution: { type: string }
+            books: { type: integer }
+            sections: { type: integer }
+            ref_segments: { type: object }
+            languages: { type: array, items: { type: string } }
+            schema_version: { type: integer }
+            build: { type: string }
+    BookDetailResponse:
+      type: object
+      properties:
+        data:
+          allOf:
+            - $ref: "#/components/schemas/Book"
+            - type: object
+              properties:
+                chapters: { type: array, items: { $ref: "#/components/schemas/Chapter" } }
+    ChapterResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            book: { $ref: "#/components/schemas/Book" }
+            chapter: { $ref: "#/components/schemas/Chapter" }
+            sections: { type: array, items: { type: object } }
+    SectionResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/Section" }
+        meta: { type: object }
+    ParallelResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            en: { $ref: "#/components/schemas/Section" }
+            ar: { $ref: "#/components/schemas/Section" }
+    SearchResponse:
+      type: object
+      properties:
+        data: { type: array, items: { type: object } }
+        meta: { type: object }
+        pagination: { type: object }
+    ReferenceResponse:
+      type: object
+      properties:
+        data: { type: array, items: { type: object } }
+        meta: { type: object }
+        pagination: { type: object }

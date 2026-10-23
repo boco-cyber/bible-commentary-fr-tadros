@@ -1,7 +1,13 @@
+const fs = require('node:fs');
+const path = require('node:path');
 const express = require('express');
+const yaml = require('js-yaml');
+const swaggerUi = require('swagger-ui-express');
 const config = require('./config');
 const { apiRouter } = require('./routes');
 const { notFoundHandler, errorHandler } = require('./middleware/errors');
+
+const openapi = yaml.load(fs.readFileSync(path.join(__dirname, 'openapi.yaml'), 'utf8'));
 
 function createApp(db, options = {}) {
   const app = express();
@@ -20,6 +26,9 @@ function createApp(db, options = {}) {
     }
     res.json(body);
   });
+
+  app.get('/openapi.json', (req, res) => res.json(openapi));
+  app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapi));
 
   app.use('/api/v1', apiRouter());
   app.use(notFoundHandler);
