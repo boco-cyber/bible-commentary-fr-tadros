@@ -69,6 +69,8 @@ test('returns an empty commentary list when the source has no commentary for the
   assert.equal(res.status, 200);
   assert.ok(res.body.data.text.en);
   assert.deepEqual(res.body.data.commentary, []);
+  assert.equal(res.body.data.commentary_status.en.available, false);
+  assert.equal(res.body.data.commentary_status.en.message.en, 'No commentary available');
 });
 
 test('validates the verse, chapter, language, and format', async () => {
@@ -85,12 +87,41 @@ test('validates the verse, chapter, language, and format', async () => {
   assert.equal((await request(app).get('/api/v1/books/nope/chapters/9/verses/1/commentary')).status, 404);
 });
 
-test('sets immutable cache headers and supports ETag revalidation', async () => {
+test('requires cache revalidation and supports ETag revalidation', async () => {
   const url = '/api/v1/books/john/chapters/9/verses/1/commentary?lang=en&format=html';
   const first = await request(app).get(url);
   assert.equal(first.status, 200);
-  assert.match(first.headers['cache-control'], /immutable/);
+  assert.match(first.headers['cache-control'], /must-revalidate/);
   assert.ok(first.headers.etag);
   const second = await request(app).get(url).set('If-None-Match', first.headers.etag);
   assert.equal(second.status, 304);
+});
+
+
+test('unmarked gaps do not repeat adjacent commentary and preserve shared source context', async () => {
+  const res = await request(app).get('/api/v1/books/genesis/chapters/4/verses/3/commentary?lang=both');
+  assert.equal(res.status, 200);
+  assert.equal(res.body.data.commentary.filter((entry) => entry.lang === 'en').length, 0);
+  assert.equal(res.body.data.commentary_status.en.available, false);
+  assert.equal(res.body.data.commentary_status.en.status, 'shared_only');
+  assert.equal(res.body.data.source_commentary_status.en.available, true);
+  assert.ok(res.body.data.shared_commentary.some((entry) => entry.lang === 'en' && entry.scope === 'section'));
+});
+
+test('missing source chapters explicitly report no commentary', async () => {
+  for (let chapter = 36; chapter <= 40; chapter++) {
+    const res = await request(app).get(`/api/v1/books/exodus/chapters/${chapter}`);
+    assert.equal(res.status, 200);
+    assert.equal(res.body.data.chapter.commentary.available, false);
+    assert.equal(res.body.data.chapter.commentary.message.en, 'No commentary available');
+    assert.equal(res.body.data.sections.length, 0);
+  }
+});
+
+test('unsplit source ranges are shared context rather than repeated individual comments', async () => {
+  const res = await request(app).get('/api/v1/books/genesis/chapters/1/verses/3/commentary?lang=en');
+  assert.equal(res.status, 200);
+  assert.equal(res.body.data.commentary.length, 0);
+  assert.ok(res.body.data.shared_commentary.some((entry) => entry.scope === 'range' && entry.verse_start === 3 && entry.verse_end === 5));
+  assert.equal(res.body.data.source_commentary_status.en.available, true);
 });

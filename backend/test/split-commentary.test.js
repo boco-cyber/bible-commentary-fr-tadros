@@ -45,10 +45,10 @@ test('keeps a section with no inline verse markers as one range chunk', () => {
   assert.doesNotMatch(chunks[0].markdown, /^\[v3\]/);
 });
 
-test('splits a partially marked section without losing its range coverage', () => {
+test('does not extend identified verse comments across unmarked gaps', () => {
   const row = section('en', 'ot_1_4:1');
   const chunks = splitCommentary(row.content_markdown, 1, 7);
-  assert.deepEqual(ranges(chunks), [[1, 1], [2, 4], [5, 6], [7, 7]]);
+  assert.deepEqual(ranges(chunks), [[1, 1], [2, 2], [5, 5], [7, 7]]);
   assert.match(chunks[0].markdown, /Now Adam knew Eve/);
   assert.match(chunks[1].markdown, /Then she bore again/);
   assert.match(chunks[2].markdown, /Cain was very angry/);
@@ -117,4 +117,10 @@ test('returns one clean chunk when no verse boundaries exist', () => {
 
 test('returns no chunks when the section body is only verse metadata', () => {
   assert.deepEqual(splitCommentary('[v6] [v9] [v10]', 6, 10), []);
+});
+
+
+test('a single inline marker is never extended across the whole source range', () => {
+  const chunks = splitCommentary('**"Verse three." \\[v3\\]**\n\nCommentary on three.', 1, 5);
+  assert.deepEqual(ranges(chunks), [[3, 3]]);
 });

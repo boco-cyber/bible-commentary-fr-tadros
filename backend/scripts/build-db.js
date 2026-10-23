@@ -120,6 +120,10 @@ function hashContent(titleEn, titleAr, mdEn, mdAr) {
   return crypto.createHash('sha256').update([titleEn, titleAr, mdEn, mdAr].join('\0')).digest('hex');
 }
 
+function sourceHeading(title) {
+  return /^(?:Book Introduction|Chapter Introduction|Section \d+)$/i.test(String(title || '').trim()) ? '' : title;
+}
+
 function pickTitle(sourceTitle, title, fallback) {
   for (const value of [sourceTitle, title]) {
     if (typeof value === 'string' && value.trim()) return value.trim();
@@ -235,8 +239,8 @@ async function buildDb({ dataDir, outFile }) {
           const firstAr = keys.length ? ar.get(firstKey) : null;
           const fallbackEn = number === 0 ? 'Introduction' : `Chapter ${number}`;
           const fallbackAr = number === 0 ? 'مقدمة' : `الإصحاح ${number}`;
-          const titleEn = pickTitle(first?.source_title, first?.title, fallbackEn);
-          const titleAr = pickTitle(firstAr?.source_title, firstAr?.title, fallbackAr);
+          const titleEn = pickTitle(first?.source_title, sourceHeading(first?.title), fallbackEn);
+          const titleAr = pickTitle(firstAr?.source_title, sourceHeading(firstAr?.title), fallbackAr);
           const info = insertChapter.run(book.id, number, titleEn, titleAr, keys.length);
           const chapterId = Number(info.lastInsertRowid);
 
@@ -246,8 +250,8 @@ async function buildDb({ dataDir, outFile }) {
             const mdEn = enRow.content_markdown || '';
             const mdAr = arRow.content_markdown || '';
             if (!mdEn || !mdAr) throw new Error(`Empty content for ${key}`);
-            const titleEn = pickTitle(enRow.source_title, enRow.title, '');
-            const titleAr = pickTitle(arRow.source_title, arRow.title, '');
+            const titleEn = pickTitle(enRow.source_title, sourceHeading(enRow.title), number === 0 ? 'Introduction' : `Chapter ${number} commentary`);
+            const titleAr = pickTitle(arRow.source_title, sourceHeading(arRow.title), number === 0 ? 'مقدمة' : `تفسير الإصحاح ${number}`);
             const contentHash = hashContent(titleEn, titleAr, mdEn, mdAr);
             contentHashes.push(`${key}:${contentHash}`);
             const infoSection = insertSection.run(

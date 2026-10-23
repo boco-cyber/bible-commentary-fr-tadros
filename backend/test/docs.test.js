@@ -30,12 +30,12 @@ test('Swagger UI is served', async () => {
   assert.match(res.text, /swagger-ui/i);
 });
 
-test('catalog and meta responses are cached for an hour', async () => {
+test('catalog revalidates corrected source data and meta is cached for an hour', async () => {
   for (const path of ['/api/v1/meta', '/api/v1/books', '/api/v1/books/genesis',
     '/api/v1/books/genesis/chapters/1']) {
     const res = await request(app).get(path);
     assert.equal(res.status, 200);
-    assert.equal(res.headers['cache-control'], 'public, max-age=3600');
+    assert.equal(res.headers['cache-control'], path === '/api/v1/meta' ? 'public, max-age=3600' : 'public, max-age=0, must-revalidate');
   }
 });
 
@@ -44,7 +44,7 @@ test('parallel responses have representation-specific ETags and honor If-None-Ma
   const first = await request(app).get(url);
   assert.equal(first.status, 200);
   assert.ok(first.headers.etag);
-  assert.match(first.headers['cache-control'], /immutable/);
+  assert.match(first.headers['cache-control'], /must-revalidate/);
 
   const cached = await request(app).get(url).set('If-None-Match', first.headers.etag);
   assert.equal(cached.status, 304);

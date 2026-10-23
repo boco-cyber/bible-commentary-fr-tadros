@@ -24,7 +24,7 @@ function parallelRouter() {
     );
     const etag = parallelEtag(section, format);
     res.set('ETag', etag);
-    res.set('Cache-Control', 'public, max-age=86400, immutable');
+    res.set('Cache-Control', 'public, max-age=0, must-revalidate');
     res.set('Vary', 'Accept-Encoding');
     if (req.headers['if-none-match'] === etag) return res.status(304).end();
     res.json({ data: { en: make('en'), ar: make('ar') }, meta: { attribution: 'Fr. Tadros Y. Malaty / القمص تادرس يعقوب' } });

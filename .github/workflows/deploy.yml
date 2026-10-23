@@ -82,10 +82,14 @@ jobs:
           echo "::error::Timed out waiting for Coolify deployment $DEPLOYMENT_UUID"
           exit 1
       - name: Verify production
+        env:
+          PRODUCTION_RESOLVE: ${{ vars.PRODUCTION_RESOLVE }}
         run: |
+          resolve_args=()
+          if [ -n "$PRODUCTION_RESOLVE" ]; then resolve_args=(--resolve "$PRODUCTION_RESOLVE"); fi
           for i in $(seq 1 30); do
             stamp="$(date +%s)-$i"
-            response=$(curl -sS -w '\n%{http_code}' \
+            response=$(curl -sS --connect-timeout 10 --max-time 20 "${resolve_args[@]}" -w '\n%{http_code}' \
               -H 'Cache-Control: no-cache' \
               "https://commentary.copticfaith.org/health?ts=$stamp" 2>/dev/null || true)
             http_code=$(printf '%s' "$response" | tail -n1)

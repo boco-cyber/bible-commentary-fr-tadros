@@ -1,0 +1,74 @@
+{
+  "languages": {
+    "en": {
+      "records": 7590,
+      "empty_records": 0,
+      "normalized_duplicate_groups": [],
+      "generated_titles_without_source_heading": 1974,
+      "verse_positions_without_individual_chunk": 9112,
+      "original_records_compared": 7590,
+      "source_mismatches": []
+    },
+    "ar": {
+      "records": 7590,
+      "empty_records": 0,
+      "normalized_duplicate_groups": [],
+      "generated_titles_without_source_heading": 1966,
+      "verse_positions_without_individual_chunk": 8742,
+      "original_records_compared": 7590,
+      "source_mismatches": []
+    }
+  },
+  "missing_chapters": [
+    {
+      "lang": "en",
+      "book": "exodus",
+      "chapter": 36
+    },
+    {
+      "lang": "en",
+      "book": "exodus",
+      "chapter": 37
+    },
+    {
+      "lang": "en",
+      "book": "exodus",
+      "chapter": 38
+    },
+    {
+      "lang": "en",
+      "book": "exodus",
+      "chapter": 39
+    },
+    {
+      "lang": "en",
+      "book": "exodus",
+      "chapter": 40
+    },
+    {
+      "lang": "ar",
+      "book": "exodus",
+      "chapter": 36
+    },
+    {
+      "lang": "ar",
+      "book": "exodus",
+      "chapter": 37
+    },
+    {
+      "lang": "ar",
+      "book": "exodus",
+      "chapter": 38
+    },
+    {
+      "lang": "ar",
+      "book": "exodus",
+      "chapter": 39
+    },
+    {
+      "lang": "ar",
+      "book": "exodus",
+      "chapter": 40
+    }
+  ]
+}

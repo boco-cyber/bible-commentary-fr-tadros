@@ -56,7 +56,7 @@ function studyRouter() {
     };
     const etag = `"${crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex')}"`;
     res.set('ETag', etag);
-    res.set('Cache-Control', 'public, max-age=86400, immutable');
+    res.set('Cache-Control', 'public, max-age=0, must-revalidate');
     res.set('Vary', 'Accept-Encoding');
     if (req.headers['if-none-match'] === etag) return res.status(304).end();
     return res.json(payload);

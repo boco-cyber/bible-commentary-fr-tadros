@@ -1,3 +1,4 @@
+const { commentaryAvailability } = require('../services/availability');
 const express = require('express');
 const { normalizeForSearch } = require('../services/normalize');
 const { buildMatchQuery } = require('../services/search');
@@ -13,7 +14,7 @@ function navigationRouter() {
   router.get('/navigation', (req, res) => {
     const db = req.app.locals.db;
     const books = db.prepare('SELECT * FROM books ORDER BY id').all();
-    const data = { books: books.map((book) => ({ ...bookSummary(book), commentary_available: !!book.included })) };
+    const data = { books: books.map((book) => ({ ...bookSummary(book), commentary_available: !!book.included, commentary: commentaryAvailability(book.included) })) };
     if (req.query.chapter !== undefined && !req.query.book) return res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'chapter requires book' } });
     if (req.query.book) {
       const book = findBookAny(db, req.query.book);
@@ -27,6 +28,7 @@ function navigationRouter() {
         const chapter = Number(req.query.chapter);
         if (!data.chapters.some((row) => row.number === chapter)) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Chapter not found' } });
         data.chapter = chapter;
+        data.commentary = commentaryAvailability(data.chapters.find((row) => row.number === chapter).section_count > 0);
         const numbers = db.prepare('SELECT DISTINCT verse FROM scripture_verses WHERE book_id = ? AND chapter = ? ORDER BY verse').all(book.id, chapter).map((row) => row.verse);
         const sections = db.prepare(`SELECT s.section_index, s.title_en, s.title_ar, s.verse_ranges_json FROM sections s JOIN chapters c ON c.id=s.chapter_id WHERE c.book_id=? AND c.number=? ORDER BY s.sequence_number`).all(book.id, chapter);
         const all = new Set(numbers);

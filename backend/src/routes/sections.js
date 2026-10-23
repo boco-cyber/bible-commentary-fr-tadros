@@ -46,7 +46,7 @@ function sendSection(req, res, section) {
     );
     const etag = parallelEtag(section, format);
     res.set('ETag', etag);
-    res.set('Cache-Control', 'public, max-age=86400, immutable');
+    res.set('Cache-Control', 'public, max-age=0, must-revalidate');
     res.set('Vary', 'Accept-Encoding');
     if (req.headers['if-none-match'] === etag) return res.status(304).end();
     return res.json({ data: { en: make('en'), ar: make('ar') }, meta: responseMeta });
@@ -67,7 +67,7 @@ function sendSection(req, res, section) {
   );
   const etag = sectionEtag(section, lang, format);
   res.set('ETag', etag);
-  res.set('Cache-Control', 'public, max-age=86400, immutable');
+  res.set('Cache-Control', 'public, max-age=0, must-revalidate');
   res.set('Vary', 'Accept-Encoding');
   if (req.headers['if-none-match'] === etag) return res.status(304).end();
   res.json({ data, meta: { lang, ...responseMeta } });

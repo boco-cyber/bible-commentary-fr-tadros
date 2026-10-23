@@ -126,7 +126,7 @@ test('Arabic section titles preserve non-empty source headings', async () => {
   db.close();
 });
 
-test('commentary chunks cover every ranged section in both languages', () => {
+test('commentary chunks stay inside source ranges without requiring invented gap coverage', () => {
   const db = openDb(DB);
   const sections = db.prepare("SELECT id, verse_ranges_json FROM sections WHERE verse_ranges_json != '[]'").all();
   const rows = db.prepare(`SELECT section_id, lang, verse_start, verse_end, content_md, content_html, content_hash
@@ -148,11 +148,11 @@ test('commentary chunks cover every ranged section in both languages', () => {
         assert.equal(body, '', `missing ${lang} chunks for non-empty section ${section.id}`);
         continue;
       }
-      assert.equal(chunks[0].verse_start, start);
-      assert.equal(chunks[chunks.length - 1].verse_end, end);
+
       let expected = start;
       for (const chunk of chunks) {
-        assert.equal(chunk.verse_start, expected);
+        assert.ok(chunk.verse_start >= expected);
+        assert.ok(chunk.verse_end <= end);
         assert.ok(chunk.verse_end >= chunk.verse_start);
         assert.ok(chunk.content_md.length > 0);
         assert.ok(chunk.content_html.length > 0);
@@ -160,7 +160,7 @@ test('commentary chunks cover every ranged section in both languages', () => {
         assert.match(chunk.content_hash, /^[0-9a-f]{64}$/);
         expected = chunk.verse_end + 1;
       }
-      assert.equal(expected, end + 1);
+
     }
   }
   db.close();
@@ -260,4 +260,30 @@ test('build rejects unconsumed sections and preserves the old output', async (t)
   assert.equal(fs.readFileSync(outFile, 'utf8'), 'previous database');
   assert.deepEqual(fs.readdirSync(dir).filter((name) => name.startsWith(tempPrefix)), []);
   assert.deepEqual(openDescriptorsReferencing(tempPrefix), []);
+});
+
+
+test('generated headings are localized and specific, while missing chapters remain empty', () => {
+  const db = openDb(DB);
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM chapters WHERE title_en='Chapter Introduction' OR title_ar='Chapter Introduction'").get().n, 0);
+  const chapter = db.prepare("SELECT c.* FROM chapters c JOIN books b ON b.id=c.book_id WHERE b.slug='2-kings' AND c.number=8").get();
+  assert.equal(chapter.title_en, 'Chapter 8');
+  assert.equal(chapter.title_ar, 'الإصحاح 8');
+  assert.ok(chapter.section_count > 0);
+  db.close();
+});
+
+test('whole rebuilt corpus preserves every original language body and source range', () => {
+  const db = openDb(DB);
+  const lookup = db.prepare('SELECT * FROM sections WHERE source_record_id=?');
+  for (const lang of ['en', 'ar']) {
+    const rows = zlib.gunzipSync(fs.readFileSync(path.join(path.dirname(CATALOG), lang, 'sections.jsonl.gz'))).toString().trim().split('\n').map(JSON.parse);
+    for (const row of rows) {
+      const stored = lookup.get(row.source_record_id);
+      assert.equal(stored[`content_md_${lang}`], row.content_markdown, `${lang}:${row.source_record_id}`);
+      assert.deepEqual(JSON.parse(stored.verse_ranges_json), row.verse_ranges);
+      if (row.source_title) assert.equal(stored[`title_${lang}`], row.source_title.trim());
+    }
+  }
+  db.close();
 });

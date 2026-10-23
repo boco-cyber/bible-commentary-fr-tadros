@@ -1,3 +1,4 @@
+const { commentaryAvailability } = require('./availability');
 function bookSummary(row) {
   return {
     id: row.id,
@@ -18,6 +19,7 @@ function bookDetail(row, chapters) {
       title: { en: chapter.title_en, ar: chapter.title_ar },
       section_count: chapter.section_count,
       available: chapter.section_count > 0,
+      commentary: commentaryAvailability(chapter.section_count > 0),
     })),
   };
 }
@@ -30,6 +32,7 @@ function chapterDetail(book, chapter, sections) {
       title: { en: chapter.title_en, ar: chapter.title_ar },
       section_count: chapter.section_count,
       available: chapter.section_count > 0,
+      commentary: commentaryAvailability(chapter.section_count > 0),
     },
     sections: sections.map((section) => ({
       id: section.id,
