@@ -51,7 +51,12 @@ function hashContent(titleEn, titleAr, mdEn, mdAr) {
 
 async function loadMap(file) {
   const map = new Map();
-  for await (const row of readJsonlGz(file)) map.set(row.source_record_id, row);
+  for await (const row of readJsonlGz(file)) {
+    if (map.has(row.source_record_id)) {
+      throw new Error(`Duplicate source_record_id ${row.source_record_id} in ${file}`);
+    }
+    map.set(row.source_record_id, row);
+  }
   return map;
 }
 
@@ -67,83 +72,101 @@ async function buildDb({ dataDir, outFile }) {
   }
   for (const key of en.keys()) if (!ar.has(key)) throw new Error(`Missing Arabic record ${key}`);
 
+  const tempFile = `${outFile}.tmp-${process.pid}`;
   fs.mkdirSync(path.dirname(outFile), { recursive: true });
-  fs.rmSync(outFile, { force: true });
-  const db = new Database(outFile);
-  db.exec(SCHEMA);
+  fs.rmSync(tempFile, { force: true });
 
-  const insertBook = db.prepare(`INSERT INTO books
-    (id, slug, book_number, testament, name_en, name_ar, short_en, short_ar, chapters_expected)
-    VALUES (@id, @slug, @book_number, @testament, @name_en, @name_ar, @short_en, @short_ar, @chapters_expected)`);
-  const insertChapter = db.prepare(`INSERT INTO chapters
-    (book_id, number, title_en, title_ar, section_count) VALUES (?, ?, ?, ?, ?)`);
-  const insertSection = db.prepare(`INSERT INTO sections
-    (source_record_id, chapter_id, sequence_number, section_index, section_count,
-     title_en, title_ar, verse_start, verse_end, verse_ranges_json,
-     content_md_en, content_md_ar, content_html_en, content_html_ar, content_hash)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-
+  let db = null;
   let inserted = 0;
-  const byBookChapter = new Map();
-  for (const [key, row] of en) {
-    const group = `${row.book_id}:${row.chapter}`;
-    if (!byBookChapter.has(group)) byBookChapter.set(group, []);
-    byBookChapter.get(group).push(key);
-  }
-  for (const keys of byBookChapter.values()) keys.sort((a, b) => Number(en.get(a).section_index) - Number(en.get(b).section_index));
+  let committed = false;
+  try {
+    db = new Database(tempFile);
+    db.exec(SCHEMA);
 
-  const transaction = db.transaction(() => {
-    for (const book of included) {
-      insertBook.run({
-        id: book.id,
-        slug: book.path_stem.replace(/^\d+-/, ''),
-        book_number: book.book_number,
-        testament: book.testament,
-        name_en: book.englishName,
-        name_ar: book.name,
-        short_en: book.englishShortName,
-        short_ar: book.shortName,
-        chapters_expected: book.chaptersCount,
-      });
+    const insertBook = db.prepare(`INSERT INTO books
+      (id, slug, book_number, testament, name_en, name_ar, short_en, short_ar, chapters_expected)
+      VALUES (@id, @slug, @book_number, @testament, @name_en, @name_ar, @short_en, @short_ar, @chapters_expected)`);
+    const insertChapter = db.prepare(`INSERT INTO chapters
+      (book_id, number, title_en, title_ar, section_count) VALUES (?, ?, ?, ?, ?)`);
+    const insertSection = db.prepare(`INSERT INTO sections
+      (source_record_id, chapter_id, sequence_number, section_index, section_count,
+       title_en, title_ar, verse_start, verse_end, verse_ranges_json,
+       content_md_en, content_md_ar, content_html_en, content_html_ar, content_hash)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
 
-      for (let number = 0; number <= book.chaptersCount; number += 1) {
-        const keys = byBookChapter.get(`${book.id}:${number}`) || [];
-        const first = keys.length ? en.get(keys[0]) : null;
-        const firstAr = keys.length ? ar.get(keys[0]) : null;
-        const titleEn = first ? first.title || `Chapter ${number}` : number === 0 ? 'Introduction' : `Chapter ${number}`;
-        const titleAr = firstAr ? firstAr.title || `الإصحاح ${number}` : number === 0 ? 'مقدمة' : `الإصحاح ${number}`;
-        const info = insertChapter.run(book.id, number, titleEn, titleAr, keys.length);
-        const chapterId = Number(info.lastInsertRowid);
+    const byBookChapter = new Map();
+    for (const [key, row] of en) {
+      const group = `${row.book_id}:${row.chapter}`;
+      if (!byBookChapter.has(group)) byBookChapter.set(group, []);
+      byBookChapter.get(group).push(key);
+    }
+    for (const keys of byBookChapter.values()) keys.sort((a, b) => Number(en.get(a).section_index) - Number(en.get(b).section_index));
 
-        for (const key of keys) {
-          const enRow = en.get(key);
-          const arRow = ar.get(key);
-          const mdEn = enRow.content_markdown || '';
-          const mdAr = arRow.content_markdown || '';
-          if (!mdEn || !mdAr) throw new Error(`Empty content for ${key}`);
-          const infoSection = insertSection.run(
-            key, chapterId, Number(enRow.sequence_number), Number(enRow.section_index), Number(enRow.section_count),
-            enRow.title, arRow.title,
-            enRow.verse_start == null ? null : Number(enRow.verse_start),
-            enRow.verse_end == null ? null : Number(enRow.verse_end),
-            JSON.stringify(enRow.verse_ranges || []),
-            mdEn, mdAr, renderMarkdown(mdEn), renderMarkdown(mdAr),
-            hashContent(enRow.title || '', arRow.title || '', mdEn, mdAr),
-          );
-          if (!infoSection.changes) throw new Error(`Failed to insert ${key}`);
-          inserted += 1;
+    const transaction = db.transaction(() => {
+      for (const book of included) {
+        insertBook.run({
+          id: book.id,
+          slug: book.path_stem.replace(/^\d+-/, ''),
+          book_number: book.book_number,
+          testament: book.testament,
+          name_en: book.englishName,
+          name_ar: book.name,
+          short_en: book.englishShortName,
+          short_ar: book.shortName,
+          chapters_expected: book.chaptersCount,
+        });
+
+        for (let number = 0; number <= book.chaptersCount; number += 1) {
+          const keys = byBookChapter.get(`${book.id}:${number}`) || [];
+          const first = keys.length ? en.get(keys[0]) : null;
+          const firstAr = keys.length ? ar.get(keys[0]) : null;
+          const titleEn = first ? first.title || `Chapter ${number}` : number === 0 ? 'Introduction' : `Chapter ${number}`;
+          const titleAr = firstAr ? firstAr.title || `الإصحاح ${number}` : number === 0 ? 'مقدمة' : `الإصحاح ${number}`;
+          const info = insertChapter.run(book.id, number, titleEn, titleAr, keys.length);
+          const chapterId = Number(info.lastInsertRowid);
+
+          for (const key of keys) {
+            const enRow = en.get(key);
+            const arRow = ar.get(key);
+            const mdEn = enRow.content_markdown || '';
+            const mdAr = arRow.content_markdown || '';
+            if (!mdEn || !mdAr) throw new Error(`Empty content for ${key}`);
+            const infoSection = insertSection.run(
+              key, chapterId, Number(enRow.sequence_number), Number(enRow.section_index), Number(enRow.section_count),
+              enRow.title, arRow.title,
+              enRow.verse_start == null ? null : Number(enRow.verse_start),
+              enRow.verse_end == null ? null : Number(enRow.verse_end),
+              JSON.stringify(enRow.verse_ranges || []),
+              mdEn, mdAr, renderMarkdown(mdEn), renderMarkdown(mdAr),
+              hashContent(enRow.title || '', arRow.title || '', mdEn, mdAr),
+            );
+            if (!infoSection.changes) throw new Error(`Failed to insert ${key}`);
+            inserted += 1;
+          }
         }
       }
+      if (inserted !== en.size) {
+        throw new Error(`Consumed ${inserted} of ${en.size} English sections; sections outside catalog book/chapter ranges were not inserted`);
+      }
+      const setMeta = db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)');
+      setMeta.run('schema_version', '1');
+      setMeta.run('built_at', new Date().toISOString());
+      setMeta.run('books', String(included.length));
+      setMeta.run('sections', String(inserted));
+      setMeta.run('attribution', 'Fr. Tadros Y. Malaty / القمص تادرس يعقوب');
+    });
+    transaction();
+    db.close();
+    db = null;
+    fs.renameSync(tempFile, outFile);
+    committed = true;
+  } finally {
+    try {
+      if (db) db.close();
+    } finally {
+      if (!committed) fs.rmSync(tempFile, { force: true });
     }
-    const setMeta = db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)');
-    setMeta.run('schema_version', '1');
-    setMeta.run('built_at', new Date().toISOString());
-    setMeta.run('books', String(included.length));
-    setMeta.run('sections', String(inserted));
-    setMeta.run('attribution', 'Fr. Tadros Y. Malaty / القمص تادرس يعقوب');
-  });
-  transaction();
-  db.close();
+  }
   return { books: included.length, sections: inserted };
 }
 
