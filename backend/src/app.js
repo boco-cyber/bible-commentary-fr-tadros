@@ -1,6 +1,10 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const express = require('express');
+const helmet = require('helmet');
+const cors = require('cors');
+const compression = require('compression');
+const morgan = require('morgan');
 const yaml = require('js-yaml');
 const swaggerUi = require('swagger-ui-express');
 const config = require('./config');
@@ -17,6 +21,23 @@ function createApp(db, options = {}) {
   app.set('trust proxy', 1);
   app.locals.db = db;
   app.locals.options = { ...config, ...options };
+  const allowedOrigins = app.locals.options.corsOrigins === '*'
+    ? '*'
+    : app.locals.options.corsOrigins.split(',').map((origin) => origin.trim()).filter(Boolean);
+
+  app.use(helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        'script-src': ["'self'", "'unsafe-inline'"],
+        'style-src': ["'self'", "'unsafe-inline'"],
+        'img-src': ["'self'", 'data:'],
+      },
+    },
+  }));
+  app.use(cors({ origin: allowedOrigins }));
+  app.use(compression());
+  app.use(morgan('combined'));
   app.use(createRateLimiter(app.locals.options.rateLimitPerMin));
 
   app.get('/health', (req, res) => {
