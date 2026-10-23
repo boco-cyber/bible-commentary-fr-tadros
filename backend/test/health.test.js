@@ -9,6 +9,12 @@ test('GET /health returns ok', async () => {
   assert.deepEqual(res.body, { status: 'ok', service: 'bible-commentary-fr-tadros' });
 });
 
+test('GET /health is not cacheable', async () => {
+  const res = await request(createApp(null)).get('/health');
+  assert.equal(res.status, 200);
+  assert.equal(res.headers['cache-control'], 'no-store');
+});
+
 test('unknown route returns JSON 404', async () => {
   const res = await request(createApp(null)).get('/nope');
   assert.equal(res.status, 404);

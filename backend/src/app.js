@@ -44,6 +44,7 @@ function createApp(db, options = {}) {
   app.use(createRateLimiter(app.locals.options.rateLimitPerMin));
 
   app.get('/health', (req, res) => {
+    res.set('Cache-Control', 'no-store');
     const body = { status: 'ok', service: 'bible-commentary-fr-tadros' };
     if (db) {
       const meta = Object.fromEntries(db.prepare('SELECT key, value FROM meta').all().map((row) => [row.key, row.value]));

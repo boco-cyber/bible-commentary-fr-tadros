@@ -34,9 +34,9 @@ jobs:
       - name: Capture current production build
         id: before
         run: |
-          meta=$(curl -fsS -H 'Cache-Control: no-cache' \
-            "https://commentary.copticfaith.org/api/v1/meta?t=$(date +%s)" 2>/dev/null || true)
-          current=$(printf '%s' "$meta" | jq -r '.data.build // empty' 2>/dev/null || true)
+          health=$(curl -fsS -H 'Cache-Control: no-cache' \
+            "https://commentary.copticfaith.org/health?ts=$(date +%s)" 2>/dev/null || true)
+          current=$(printf '%s' "$health" | jq -r '.build // empty' 2>/dev/null || true)
           echo "before=$current" >> "$GITHUB_OUTPUT"
           echo "current production build: ${current:-<none>}"
       - name: Trigger Coolify deployment
@@ -57,12 +57,10 @@ jobs:
         run: |
           for i in $(seq 1 60); do
             stamp="$(date +%s)-$i"
-            meta=$(curl -fsS -H 'Cache-Control: no-cache' \
-              "https://commentary.copticfaith.org/api/v1/meta?t=$stamp" 2>/dev/null || true)
-            build=$(printf '%s' "$meta" | jq -r '.data.build // empty' 2>/dev/null || true)
-            if [ -n "$build" ] && [ "$build" != "$BEFORE_BUILD" ] \
-              && curl -fsS -H 'Cache-Control: no-cache' \
-                "https://commentary.copticfaith.org/health?t=$stamp" >/dev/null; then
+            health=$(curl -fsS -H 'Cache-Control: no-cache' \
+              "https://commentary.copticfaith.org/health?ts=$stamp" 2>/dev/null || true)
+            build=$(printf '%s' "$health" | jq -r '.build // empty' 2>/dev/null || true)
+            if [ -n "$build" ] && [ "$build" != "$BEFORE_BUILD" ]; then
               echo "production healthy on new build $build (was ${BEFORE_BUILD:-<none>})"
               exit 0
             fi
