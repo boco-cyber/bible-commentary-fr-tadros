@@ -4,7 +4,9 @@
 node_modules
 **/node_modules
 backend/test/.tmp
-data/*.sqlite
-data/*.sqlite-*
+**/*.sqlite
+**/*.sqlite-*
 .env
+.env*
+**/.env*
 *.log

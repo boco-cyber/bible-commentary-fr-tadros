@@ -9,13 +9,16 @@ RUN cd backend && node scripts/build-db.js --out /app/data/commentary.sqlite
 FROM node:20-bookworm-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
-COPY backend/package.json backend/package-lock.json ./backend/
-RUN cd backend && npm ci --omit=dev && npm cache clean --force
-COPY backend/src ./backend/src
-COPY data/catalog.json data/attribution.json ./backend/data/
-COPY --from=builder /app/data/commentary.sqlite ./backend/data/commentary.sqlite
-RUN useradd --system --uid 1001 appuser && chown -R appuser:appuser /app
+RUN groupadd --gid 1001 appuser \
+  && useradd --uid 1001 --gid appuser --create-home --home-dir /home/appuser --shell /usr/sbin/nologin appuser \
+  && mkdir -p /app/backend \
+  && chown appuser:appuser /app/backend
+COPY --chown=appuser:appuser backend/package.json backend/package-lock.json ./backend/
 USER appuser
+RUN cd backend && npm ci --omit=dev && npm cache clean --force
+COPY --chown=appuser:appuser backend/src ./backend/src
+COPY --chown=appuser:appuser data/catalog.json data/attribution.json ./backend/data/
+COPY --chown=appuser:appuser --from=builder /app/data/commentary.sqlite ./backend/data/commentary.sqlite
 WORKDIR /app/backend
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
