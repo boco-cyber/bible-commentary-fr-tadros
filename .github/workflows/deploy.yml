@@ -97,11 +97,11 @@ jobs:
             echo "attempt $i/30: HTTP ${http_code:-<none>} status=${status:-<none>} books=${books:-<none>} sections=${sections:-<none>} schema_version=${schema_version:-<none>}"
             if [ "$http_code" = "200" ] && [ "$status" = "ok" ] && \
               [ "$books" = "67" ] && [ "$sections" = "7590" ] && \
-              [ "$schema_version" = "2" ]; then
+              [ "$schema_version" = "4" ]; then
               echo "production verification passed"
               exit 0
             fi
             sleep 5
           done
-          echo "::error::Production failed verification: expected HTTP 200 with status=ok, books=67, sections=7590, schema_version=2"
+          echo "::error::Production failed verification: expected HTTP 200 with status=ok, books=67, sections=7590, schema_version=4"
           exit 1

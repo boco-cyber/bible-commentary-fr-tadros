@@ -21,7 +21,7 @@ test('GET /health reports schema version and content checksum', async () => {
   const res = await request(createApp(db)).get('/health');
   db.close();
   assert.equal(res.status, 200);
-  assert.equal(res.body.schema_version, 3);
+  assert.equal(res.body.schema_version, 4);
   assert.match(res.body.checksum, /^[0-9a-f]{64}$/);
   assert.equal(res.body.books, 67);
   assert.equal(res.body.sections, 7590);

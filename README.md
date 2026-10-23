@@ -42,6 +42,9 @@ in `backend/.env.example`.
 | Endpoint | Description |
 |---|---|
 | `GET /health` | Liveness and corpus counts |
+| `GET /api/v1/navigation` | Book, chapter and verse picker with section associations |
+| `GET /api/v1/resolve` | Resolve a Bible reference to bilingual text |
+| `GET /api/v1/scripture/search` | Search Bible words and phrases (KJV/AVD) |
 | `GET /api/v1/meta` | Author, attribution, languages, counts, build |
 | `GET /api/v1/books` | Book catalog, optionally filtered by testament |
 | `GET /api/v1/books/:book` | Book detail and chapter list |

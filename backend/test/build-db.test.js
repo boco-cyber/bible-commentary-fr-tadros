@@ -190,7 +190,7 @@ test('table content is preserved inside commentary chunks', () => {
 test('meta records schema, counts, provenance, and checksums', () => {
   const db = openDb(DB);
   const meta = Object.fromEntries(db.prepare('SELECT key, value FROM meta').all().map((r) => [r.key, r.value]));
-  assert.equal(meta.schema_version, '3');
+  assert.equal(meta.schema_version, '4');
   assert.equal(meta.chunks_en, '12457');
   assert.equal(meta.chunks_ar, '11955');
   assert.equal(meta.sections, '7590');

@@ -185,3 +185,18 @@ gzipped JSONL at image build time means:
 
 FTS5 also provides better English and Arabic full-text search than a generic
 document database text index while remaining inside the same single file.
+
+
+## Navigation and Bible search
+
+Schema v4 stores both bundled translations in `scripture_verses`, keyed by
+book/chapter/verse/language, with original display text and normalized search text.
+`scripture_fts` indexes that normalized text using FTS5. The database builder
+validates source positions and translation counts before atomically publishing
+the rebuilt database. Runtime connections remain read-only.
+
+`/navigation` combines Scripture positions with commentary ranges so websites can
+construct book/chapter/verse pickers, including books without commentary.
+`/resolve` parses explicit English/Arabic references and validates positions.
+`/scripture/search` provides paginated whole-word/phrase search independent of
+the existing commentary search and reverse citation lookup.

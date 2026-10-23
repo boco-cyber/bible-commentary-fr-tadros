@@ -12,7 +12,7 @@ test('OpenAPI document covers all endpoints', async () => {
   const res = await request(app).get('/openapi.json');
   assert.equal(res.status, 200);
   assert.equal(res.body.openapi.startsWith('3.'), true);
-  for (const path of ['/api/v1/meta', '/api/v1/books', '/api/v1/books/{book}',
+  for (const path of ['/api/v1/navigation', '/api/v1/resolve', '/api/v1/scripture/search', '/api/v1/meta', '/api/v1/books', '/api/v1/books/{book}',
     '/api/v1/books/{book}/chapters/{chapter}',
     '/api/v1/books/{book}/chapters/{chapter}/scripture',
     '/api/v1/books/{book}/chapters/{chapter}/study',

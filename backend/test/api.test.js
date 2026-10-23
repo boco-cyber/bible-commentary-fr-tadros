@@ -30,7 +30,7 @@ test('meta describes the corpus and its provenance', async () => {
   assert.match(res.body.data.source_sha256.en, /^[0-9a-f]{64}$/);
   assert.match(res.body.data.source_sha256.ar, /^[0-9a-f]{64}$/);
   assert.match(res.body.data.content_checksum, /^[0-9a-f]{64}$/);
-  assert.equal(res.body.data.schema_version, 3);
+  assert.equal(res.body.data.schema_version, 4);
   assert.ok(res.body.data.build);
 });
 

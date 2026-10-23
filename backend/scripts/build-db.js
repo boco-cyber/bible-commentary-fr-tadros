@@ -19,12 +19,22 @@ const EXPECTED = {
   droppedRefsAr: 1,
   chunksEn: 12457,
   chunksAr: 11955,
-  schemaVersion: 3,
+  schemaVersion: 4,
 };
 const DEFAULT_DATA = path.join(__dirname, '..', '..', 'data');
 const DEFAULT_OUT = path.join(__dirname, '..', 'data', 'commentary.sqlite');
 
 const SCHEMA = `
+CREATE TABLE scripture_verses (
+  id INTEGER PRIMARY KEY, book_id INTEGER NOT NULL REFERENCES books(id),
+  chapter INTEGER NOT NULL, verse INTEGER NOT NULL, lang TEXT NOT NULL,
+  text TEXT NOT NULL, normalized TEXT NOT NULL,
+  UNIQUE(book_id, chapter, verse, lang)
+);
+CREATE VIRTUAL TABLE scripture_fts USING fts5(
+  normalized, content='scripture_verses', content_rowid='id',
+  tokenize='unicode61 remove_diacritics 2'
+);
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE books (
   id INTEGER PRIMARY KEY, slug TEXT NOT NULL UNIQUE, book_number INTEGER NOT NULL,
@@ -337,6 +347,23 @@ async function buildDb({ dataDir, outFile }) {
       setMeta.run('attribution', `${attribution.author.en} / ${attribution.author.ar}`);
     });
     transaction();
+    const insertVerse = db.prepare('INSERT INTO scripture_verses (book_id, chapter, verse, lang, text, normalized) VALUES (?, ?, ?, ?, ?, ?)');
+    const bookIds = new Map(db.prepare('SELECT id, slug FROM books').all().map((book) => [book.slug, book.id]));
+    for (const [lang, file, expected] of [['en', 'kjv', 31102], ['ar', 'avd', 31104]]) {
+      const verses = [];
+      for await (const row of readJsonlGz(path.join(dataDir, 'bible', `${file}.jsonl.gz`))) {
+        if (!bookIds.has(row.book) || !Number.isInteger(row.chapter) || row.chapter < 1
+          || !Number.isInteger(row.verse) || row.verse < 1 || typeof row.text !== 'string' || !row.text.trim()) {
+          throw new Error(`Invalid Scripture row in ${file}`);
+        }
+        verses.push(row);
+      }
+      if (verses.length !== expected) throw new Error(`Unexpected Scripture count in ${file}: ${verses.length}`);
+      db.transaction(() => {
+        for (const row of verses) insertVerse.run(bookIds.get(row.book), row.chapter, row.verse, lang, row.text, normalizeForSearch(row.text));
+      })();
+    }
+    db.exec("INSERT INTO scripture_fts(scripture_fts) VALUES('rebuild')");
     db.exec("INSERT INTO sections_fts_en(sections_fts_en) VALUES('rebuild')");
     db.exec("INSERT INTO sections_fts_ar(sections_fts_ar) VALUES('rebuild')");
     db.close();

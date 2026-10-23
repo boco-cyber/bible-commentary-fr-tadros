@@ -154,7 +154,7 @@ Scripture is public-domain KJV (English) and Smith–Van Dyke (Arabic). Source U
 `/api/v1/meta` also returns the work title in both languages, the attribution
 notice, excluded-book counts, dropped invalid reference counts, per-language
 commentary chunk counts, the SHA-256 of each committed gzipped source file, the
-corpus `content_checksum`, and `schema_version` 3. `/health` repeats the schema version and checksum so
+corpus `content_checksum`, and `schema_version` 4. `/health` repeats the schema version and checksum so
 deployments can be verified without cached metadata.
 
 ### Scripture and study
@@ -236,3 +236,36 @@ always includes KJV and AVD.
 - The underlying `commentary_chunks` rows are built from the section Markdown at
   inline verse markers and paragraph boundaries, so paragraphs and tables are
   preserved.
+
+
+## Website navigation and search tools
+
+These read-only endpoints supply the website's book/chapter/verse picker and command bar.
+The website controls presentation; no frontend is bundled.
+
+| Tool | Request | Result |
+| --- | --- | --- |
+| Pick a book | `GET /api/v1/navigation` | All 73 books, bilingual names and commentary availability |
+| Pick a chapter | `GET /api/v1/navigation?book=matthew` | Ordered chapters present in Scripture or commentary |
+| Pick a verse | `GET /api/v1/navigation?book=matthew&chapter=2` | Verse numbers, text availability, associated section indices and section outline |
+| Go to reference | `GET /api/v1/resolve?q=John%203:16-18` | Canonical book, chapter, verse range, bilingual text and navigation links |
+| Find Bible words | `GET /api/v1/scripture/search?q=love&lang=en` | Matching KJV verses with canonical references |
+| Find an exact phrase | `GET /api/v1/scripture/search?q=%22God%20so%20loved%22` | Phrase matches; separate unquoted terms use AND |
+| Find commentary | `GET /api/v1/search?q=love&lang=en` | Existing commentary full-text search |
+| Find citations | `GET /api/v1/references?book=john&chapter=3&verse=16` | Existing commentary sections that cite this reference |
+
+Bible search accepts `lang=en|ar`, optional `book` (slug or catalog ID), `limit=1..50`
+(default 20), and `offset=0..100000` (default 0). Responses include `data`, translation
+metadata, and `pagination: {total, limit, offset}`. Search uses whole tokens, not substrings;
+Arabic diacritics and common letter variants are normalized. User input is quoted before
+being passed to FTS; raw FTS operators are not exposed.
+
+The resolver accepts a full English/Arabic name, catalog abbreviation, source book code,
+or slug followed by a chapter and optional verse/range. Examples: `John 3`, `John 3:16`,
+`1 John 2:1-3`, `يوحنا ٣:١٦`. Ranges stay within one chapter. Invalid syntax returns 400;
+unknown books or positions return 404. Text is null where only commentary positions exist.
+All navigation results distinguish missing Scripture text from missing commentary.
+
+Schema version 4 adds `scripture_verses` (62,206 rows) and its SQLite FTS5 index,
+rebuilt from committed KJV/AVD sources with the database. Runtime access stays read-only.
+Rebuild the database before starting this version; there is no live migration.
