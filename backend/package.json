@@ -10,7 +10,7 @@
     "start": "node src/server.js",
     "build:db": "node scripts/build-db.js",
     "pretest": "node scripts/build-db.js --out test/.tmp/commentary.sqlite",
-    "test": "node --test"
+    "test": "NODE_ENV=test node --test"
   },
   "dependencies": {
     "better-sqlite3": "^11.7.0",

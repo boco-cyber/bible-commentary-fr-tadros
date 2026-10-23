@@ -1,5 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const path = require('node:path');
+const { execFile } = require('node:child_process');
+const { promisify } = require('node:util');
 const request = require('supertest');
 const { createApp } = require('../src/app');
 const { openTestDb } = require('./helpers/db');
@@ -39,6 +42,32 @@ test('CORS allows only configured origins when CORS_ORIGINS is a list', async ()
     .get('/api/v1/meta')
     .set('Origin', 'https://evil.example');
   assert.equal(denied.headers['access-control-allow-origin'], undefined);
+});
+
+test('request logging is disabled when NODE_ENV is test', async () => {
+  const appPath = path.join(__dirname, '..', 'src', 'app');
+  const dbPath = path.join(__dirname, 'helpers', 'db');
+  const supertestPath = require.resolve('supertest');
+  const script = `
+    const request = require(${JSON.stringify(supertestPath)});
+    const { createApp } = require(${JSON.stringify(appPath)});
+    const { openTestDb } = require(${JSON.stringify(dbPath)});
+    const db = openTestDb();
+    const app = createApp(db, { rateLimitPerMin: 10000 });
+    request(app).get('/api/v1/meta').then(() => {
+      db.close();
+      process.stdout.write('REQUEST_DONE\\n');
+    }).catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
+  `;
+  const { stdout } = await promisify(execFile)(process.execPath, ['-e', script], {
+    cwd: path.join(__dirname, '..'),
+    env: { ...process.env, NODE_ENV: 'test' },
+  });
+  assert.match(stdout, /REQUEST_DONE/);
+  assert.doesNotMatch(stdout, /GET \/api\/v1\/meta/);
 });
 
 test('large JSON responses are gzip compressed', async () => {

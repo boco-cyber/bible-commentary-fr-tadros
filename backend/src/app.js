@@ -24,6 +24,7 @@ function createApp(db, options = {}) {
   const allowedOrigins = app.locals.options.corsOrigins === '*'
     ? '*'
     : app.locals.options.corsOrigins.split(',').map((origin) => origin.trim()).filter(Boolean);
+  const logRequests = app.locals.options.logRequests ?? process.env.NODE_ENV !== 'test';
 
   app.use(helmet({
     contentSecurityPolicy: {
@@ -37,7 +38,9 @@ function createApp(db, options = {}) {
   }));
   app.use(cors({ origin: allowedOrigins }));
   app.use(compression());
-  app.use(morgan('combined'));
+  if (logRequests) {
+    app.use(morgan('combined'));
+  }
   app.use(createRateLimiter(app.locals.options.rateLimitPerMin));
 
   app.get('/health', (req, res) => {
