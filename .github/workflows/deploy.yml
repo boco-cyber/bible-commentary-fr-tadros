@@ -31,15 +31,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Capture current production build
-        id: before
-        run: |
-          health=$(curl -fsS -H 'Cache-Control: no-cache' \
-            "https://commentary.copticfaith.org/health?ts=$(date +%s)" 2>/dev/null || true)
-          current=$(printf '%s' "$health" | jq -r '.build // empty' 2>/dev/null || true)
-          echo "before=$current" >> "$GITHUB_OUTPUT"
-          echo "current production build: ${current:-<none>}"
       - name: Trigger Coolify deployment
+        id: deploy
         env:
           COOLIFY_BASE_URL: ${{ secrets.COOLIFY_BASE_URL }}
           COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
@@ -48,23 +41,67 @@ jobs:
         run: |
           resolve_args=()
           if [ -n "$COOLIFY_RESOLVE" ]; then resolve_args=(--resolve "$COOLIFY_RESOLVE"); fi
-          curl -fsS -X POST "${resolve_args[@]}" \
+          response=$(curl -fsS -X POST "${resolve_args[@]}" \
             -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
-            "$COOLIFY_BASE_URL/api/v1/deploy?uuid=$COOLIFY_APP_UUID"
-      - name: Wait for production to serve the new build
+            "$COOLIFY_BASE_URL/api/v1/deploy?uuid=$COOLIFY_APP_UUID")
+          echo "$response"
+          uuid=$(printf '%s' "$response" | jq -r '.deployments[0].deployment_uuid // empty')
+          if [ -z "$uuid" ]; then
+            echo "::error::Coolify did not return a deployment UUID"
+            exit 1
+          fi
+          echo "uuid=$uuid" >> "$GITHUB_OUTPUT"
+          echo "Coolify deployment UUID: $uuid"
+      - name: Wait for Coolify deployment
         env:
-          BEFORE_BUILD: ${{ steps.before.outputs.before }}
+          COOLIFY_BASE_URL: ${{ secrets.COOLIFY_BASE_URL }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+          COOLIFY_RESOLVE: ${{ vars.COOLIFY_RESOLVE }}
+          DEPLOYMENT_UUID: ${{ steps.deploy.outputs.uuid }}
         run: |
-          for i in $(seq 1 60); do
-            stamp="$(date +%s)-$i"
-            health=$(curl -fsS -H 'Cache-Control: no-cache' \
-              "https://commentary.copticfaith.org/health?ts=$stamp" 2>/dev/null || true)
-            build=$(printf '%s' "$health" | jq -r '.build // empty' 2>/dev/null || true)
-            if [ -n "$build" ] && [ "$build" != "$BEFORE_BUILD" ]; then
-              echo "production healthy on new build $build (was ${BEFORE_BUILD:-<none>})"
-              exit 0
-            fi
+          resolve_args=()
+          if [ -n "$COOLIFY_RESOLVE" ]; then resolve_args=(--resolve "$COOLIFY_RESOLVE"); fi
+          for i in $(seq 1 78); do
+            response=$(curl -fsS "${resolve_args[@]}" \
+              -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
+              "$COOLIFY_BASE_URL/api/v1/deployments/$DEPLOYMENT_UUID" 2>/dev/null || true)
+            status=$(printf '%s' "$response" | jq -r '.status // empty' 2>/dev/null || true)
+            echo "attempt $i/78: deployment status=${status:-<unknown>}"
+            case "$status" in
+              finished)
+                echo "Coolify deployment $DEPLOYMENT_UUID finished successfully"
+                exit 0
+                ;;
+              failed|error|cancelled)
+                echo "::error::Coolify deployment $DEPLOYMENT_UUID ended with status $status"
+                exit 1
+                ;;
+            esac
             sleep 10
           done
-          echo "deployment did not become healthy on a new build (before=${BEFORE_BUILD:-<none>})"
+          echo "::error::Timed out waiting for Coolify deployment $DEPLOYMENT_UUID"
+          exit 1
+      - name: Verify production
+        run: |
+          for i in $(seq 1 30); do
+            stamp="$(date +%s)-$i"
+            response=$(curl -sS -w '\n%{http_code}' \
+              -H 'Cache-Control: no-cache' \
+              "https://commentary.copticfaith.org/health?ts=$stamp" 2>/dev/null || true)
+            http_code=$(printf '%s' "$response" | tail -n1)
+            body=$(printf '%s' "$response" | sed '$d')
+            status=$(printf '%s' "$body" | jq -r '.status // empty' 2>/dev/null || true)
+            books=$(printf '%s' "$body" | jq -r '.books // empty' 2>/dev/null || true)
+            sections=$(printf '%s' "$body" | jq -r '.sections // empty' 2>/dev/null || true)
+            schema_version=$(printf '%s' "$body" | jq -r '.schema_version // empty' 2>/dev/null || true)
+            echo "attempt $i/30: HTTP ${http_code:-<none>} status=${status:-<none>} books=${books:-<none>} sections=${sections:-<none>} schema_version=${schema_version:-<none>}"
+            if [ "$http_code" = "200" ] && [ "$status" = "ok" ] && \
+              [ "$books" = "67" ] && [ "$sections" = "7590" ] && \
+              [ "$schema_version" = "2" ]; then
+              echo "production verification passed"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::Production failed verification: expected HTTP 200 with status=ok, books=67, sections=7590, schema_version=2"
           exit 1
