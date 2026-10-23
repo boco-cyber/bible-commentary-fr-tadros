@@ -60,6 +60,29 @@ function findReferenceSections(db, { bookId, chapter, verse, lang, limit, offset
   return { rows, total };
 }
 
+function searchSections(db, { match, lang, bookId, testament, chapter, limit, offset }) {
+  const table = lang === 'ar' ? 'sections_fts_ar' : 'sections_fts_en';
+  const filters = [];
+  const params = [match];
+  if (bookId) { filters.push('b.id = ?'); params.push(bookId); }
+  if (testament) { filters.push('b.testament = ?'); params.push(testament); }
+  if (chapter !== null && chapter !== undefined) { filters.push('c.number = ?'); params.push(chapter); }
+  const extra = filters.length ? ` AND ${filters.join(' AND ')}` : '';
+  const from = `FROM ${table} f
+    JOIN sections s ON s.id = f.rowid
+    JOIN chapters c ON c.id = s.chapter_id
+    JOIN books b ON b.id = c.book_id
+    WHERE ${table} MATCH ?${extra}`;
+  const total = db.prepare(`SELECT COUNT(*) AS n ${from}`).get(...params).n;
+  const rows = db.prepare(`SELECT s.id, s.section_index, s.title_en, s.title_ar, s.verse_ranges_json,
+      c.number AS chapter_number, b.slug AS book_slug, b.name_en, b.name_ar,
+      snippet(${table}, 1, '<mark>', '</mark>', '…', 32) AS snippet
+    ${from}
+    ORDER BY b.book_number, c.number, s.section_index
+    LIMIT ? OFFSET ?`).all(...params, limit, offset);
+  return { rows, total };
+}
+
 module.exports = {
   listBooks,
   findBook,
@@ -70,4 +93,5 @@ module.exports = {
   findSectionByIndex,
   listSectionRefs,
   findReferenceSections,
+  searchSections,
 };
