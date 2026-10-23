@@ -33,6 +33,21 @@ CREATE TABLE sections (
 );
 CREATE INDEX idx_chapters_book ON chapters(book_id, number);
 CREATE INDEX idx_sections_chapter ON sections(chapter_id, sequence_number);
+CREATE TABLE section_refs (
+  id INTEGER PRIMARY KEY,
+  section_id INTEGER NOT NULL REFERENCES sections(id),
+  lang TEXT NOT NULL CHECK (lang IN ('en','ar')),
+  ref_type TEXT NOT NULL,
+  book_id INTEGER NOT NULL,
+  chapter INTEGER NOT NULL,
+  verse_start INTEGER NOT NULL,
+  verse_end INTEGER NOT NULL,
+  label TEXT NOT NULL,
+  display TEXT NOT NULL,
+  raw_token TEXT NOT NULL
+);
+CREATE INDEX idx_refs_target ON section_refs(book_id, chapter, verse_start, verse_end);
+CREATE INDEX idx_refs_section ON section_refs(section_id, lang);
 `;
 
 function parseArgs() {
@@ -94,6 +109,11 @@ async function buildDb({ dataDir, outFile }) {
        content_md_en, content_md_ar, content_html_en, content_html_ar, content_hash)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
 
+    const insertRef = db.prepare(`INSERT INTO section_refs
+      (section_id, lang, ref_type, book_id, chapter, verse_start, verse_end, label, display, raw_token)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    const refCounts = { en: 0, ar: 0 };
+
     const byBookChapter = new Map();
     for (const [key, row] of en) {
       const group = `${row.book_id}:${row.chapter}`;
@@ -141,6 +161,19 @@ async function buildDb({ dataDir, outFile }) {
               hashContent(enRow.title || '', arRow.title || '', mdEn, mdAr),
             );
             if (!infoSection.changes) throw new Error(`Failed to insert ${key}`);
+            const sectionId = Number(infoSection.lastInsertRowid);
+            for (const [lang, row] of [['en', enRow], ['ar', arRow]]) {
+              for (const ref of row.references || []) {
+                for (const segment of ref.segments || []) {
+                  insertRef.run(
+                    sectionId, lang, ref.type || 'single', Number(ref.book_id),
+                    Number(segment.chapter), Number(segment.verse_start), Number(segment.verse_end),
+                    ref.label || '', ref.display_text || ref.label || '', ref.raw_token || '',
+                  );
+                  refCounts[lang] += 1;
+                }
+              }
+            }
             inserted += 1;
           }
         }
@@ -148,11 +181,16 @@ async function buildDb({ dataDir, outFile }) {
       if (inserted !== en.size) {
         throw new Error(`Consumed ${inserted} of ${en.size} English sections; sections outside catalog book/chapter ranges were not inserted`);
       }
+      if (refCounts.en !== 43327 || refCounts.ar !== 45235) {
+        throw new Error(`Unexpected reference segment counts: ${refCounts.en}/${refCounts.ar}`);
+      }
       const setMeta = db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)');
       setMeta.run('schema_version', '1');
       setMeta.run('built_at', new Date().toISOString());
       setMeta.run('books', String(included.length));
       setMeta.run('sections', String(inserted));
+      setMeta.run('ref_segments_en', String(refCounts.en));
+      setMeta.run('ref_segments_ar', String(refCounts.ar));
       setMeta.run('attribution', 'Fr. Tadros Y. Malaty / القمص تادرس يعقوب');
     });
     transaction();
