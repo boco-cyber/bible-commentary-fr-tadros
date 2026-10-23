@@ -7,6 +7,7 @@ const { parallelRouter } = require('./parallel');
 const { referencesRouter } = require('./references');
 const { searchRouter } = require('./search');
 const { scriptureRouter } = require('./scripture');
+const { studyRouter } = require('./study');
 
 function apiRouter() {
   const router = express.Router();
@@ -14,6 +15,7 @@ function apiRouter() {
   router.use(catalogRouter());
   router.use(chaptersRouter());
   router.use(scriptureRouter());
+  router.use(studyRouter());
   router.use(sectionsRouter());
   router.use(parallelRouter());
   router.use(referencesRouter());

@@ -14,6 +14,8 @@ commentary of Fr. Tadros Y. Malaty / القمص تادرس يعقوب.
 - Catalog, chapter, section, and parallel English/Arabic endpoints.
 - Bilingual full-text search with highlighted snippets.
 - Scripture cross-reference lookup in both directions.
+- Bilingual verse reader using public-domain KJV and Arabic Smith–Van Dyke.
+- Combined `/study` endpoint with commentary blocks placed after each verse range.
 - SQLite + FTS5 inside a single image; no external database.
 
 ## Quick start
@@ -43,6 +45,8 @@ in `backend/.env.example`.
 | `GET /api/v1/books` | Book catalog, optionally filtered by testament |
 | `GET /api/v1/books/:book` | Book detail and chapter list |
 | `GET /api/v1/books/:book/chapters/:chapter` | Chapter and section summaries |
+| `GET /api/v1/books/:book/chapters/:chapter/scripture` | Verse text (KJV + AVD) and commentary indices |
+| `GET /api/v1/books/:book/chapters/:chapter/study` | Verses with commentary blocks after each verse range |
 | `GET /api/v1/books/:book/chapters/:chapter/sections/:index` | Full section |
 | `GET /api/v1/sections/:id` | Full section by id |
 | `GET /api/v1/parallel` | Same section in English and Arabic |
@@ -51,13 +55,18 @@ in `backend/.env.example`.
 
 See [docs/API.md](docs/API.md) for parameters, examples, caching, and errors.
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the data model and build
-flow, and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for Coolify deployment.
+flow, [docs/DATA.md](docs/DATA.md) for Scripture provenance and formats, and
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for Coolify deployment.
 
 ## Data pipeline
 
 `backend/scripts/build-db.js` validates the committed gzipped JSONL and builds
 `commentary.sqlite` during CI and Docker image builds. The server opens the
 database read-only and never writes to it at runtime.
+
+`data/bible/` holds the committed public-domain KJV and Arabic Smith–Van Dyke
+JSONL. The Scripture and study routes load these once into memory; they are not
+part of `commentary.sqlite`. See [docs/DATA.md](docs/DATA.md).
 
 ### Regenerating data
 
@@ -82,24 +91,19 @@ attribution and permission notice in [NOTICE](NOTICE).
 
 ## Bible text for the verse reader
 
-The verse reader uses the Scripture endpoint to show each verse above its
-related commentary. `data/bible/avd.jsonl.gz` contains the same 31,104 Arabic
-Smith–Van Dyke verses previously imported into the prayer backend, normalized
-to this repository's book slugs. Source revision, original book checksums and
-attribution are recorded in `data/bible/avd-source.json`. This edition has 66
-books, so it does not supply the deuterocanonical texts in the commentary catalog.
+The verse reader uses two public-domain translations:
 
-English Scripture is identified as NKJV and is explicitly unavailable until an
-authorized dataset is imported. To import your licensed JSONL (one verse per
-line with `translation: "NKJV"`, `book_code`, `chapter`, `verse`, `text`):
+| Language | Translation | File | Verses |
+| --- | --- | --- | ---: |
+| English | King James Version (KJV) | `data/bible/kjv.jsonl.gz` | 31,102 |
+| Arabic | Smith–Van Dyke (AVD, 1865) | `data/bible/avd.jsonl.gz` | 31,104 |
 
-```bash
-cd backend
-node scripts/import-scripture.js /path/to/licensed-nkjv.jsonl 'Source and license attribution'
-```
+Both are 66-book editions, so deuterocanonical books in the commentary catalog
+have verse positions and commentary but `null` Scripture text. Provenance,
+source URLs, and SHA-256 checksums are in `data/bible/*-source.json` and
+[docs/DATA.md](docs/DATA.md). NKJV is not included.
 
-The importer validates coordinates and duplicates, records provenance, and
-writes `data/bible/nkjv.jsonl.gz`. Restart/redeploy the API after importing.
-Do not commit licensed text to a public repository unless its license permits
-redistribution. Import validation checks structure, not translation identity,
-licensing rights, or completeness.
+- `GET /api/v1/books/:book/chapters/:chapter/scripture` returns every verse with both translations and the commentary section indices that cover it.
+- `GET /api/v1/books/:book/chapters/:chapter/study` returns ordered `verses` blocks and one `commentary` block after each verse range. Use `lang=en|ar|both` and `format=html|markdown|both` for the commentary representation.
+
+See [docs/API.md](docs/API.md) for the block shape and examples.

@@ -2,8 +2,11 @@
   "repository": "https://github.com/midvash/bible-data",
   "revision": "d9fe1779447717bbfcb578e505b893125cad581c",
   "translation": "AVD",
+  "name": "Arabic Smith–Van Dyke (1865)",
+  "language": "ar",
   "license": "Public domain, Smith–Van Dyke 1865",
-  "source": "https://raw.githubusercontent.com/midvash/bible-data/d9fe1779447717bbfcb578e505b893125cad581c/versions/ar/svd/",
+  "source": "https://raw.githubusercontent.com/midvash/bible-data/d9fe1779447717bbfcb578e505b893125cad581c/versions/ar/svd/svd.json",
+  "source_sha256": "cf3eba11d6e57feb0a6f4fc9d4ed41505e9f74067beac96f64b25b3b1e2171f7",
   "books_sha256": {
     "Gen": "622303248916124481150da9e6d26a7b471cd18206f49653bd9714ef959cbdd3",
     "Exod": "6cf9e5863624f09a561b8df1c2fc1db751751936b8ccd6c2b0f62de97798bd42",
@@ -72,10 +75,9 @@
     "Jude": "78ad625826e5cd1a34da986b0375013ff27fc6dd164699ad8ea901f7f32383a5",
     "Rev": "9c7ba39c899230cc1e76df2f25fd958b872e83447eb7febae88994c1ca049a42"
   },
-  "jsonl_sha256": "330c6a17af89ffe0bba6c019923331a1746604ad0b0f5716f77d0c790d307860",
-  "name": "Arabic Smith–Van Dyke (1865)",
-  "language": "ar",
+  "jsonl_sha256": "e77af9bdcda29b446bd400cf5f2f15598a4b35f80302c71715985855a2627707",
+  "gzip_sha256": "d95fb10d937d3713e07906fc18c83c510f107db11f81f5ac0d96cd3488b067aa",
   "verses": 31104,
   "books": 66,
-  "normalized_sha256": "e77af9bdcda29b446bd400cf5f2f15598a4b35f80302c71715985855a2627707"
+  "chapters": 1189
 }

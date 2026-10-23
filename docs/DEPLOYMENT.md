@@ -2,7 +2,9 @@
 
 Production runs on Coolify at `https://commentary.copticfaith.org`. The SQLite
 database is built inside the Docker image, so there is no persistent volume,
-init job, or runtime migration.
+init job, or runtime migration. The public-domain Scripture JSONL under
+`data/bible/` is copied into the image and loaded into memory on first use; no
+extra volume or environment variable is required.
 
 ## Coolify application settings
 
@@ -18,7 +20,8 @@ init job, or runtime migration.
 | Persistent storage | None |
 
 The base directory must be `/` so the Docker build can copy the committed
-`data/` files used to build `commentary.sqlite`.
+`data/` files used to build `commentary.sqlite` and the `data/bible/` Scripture
+JSONL used by `/scripture` and `/study`.
 
 ## Environment variables
 

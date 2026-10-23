@@ -12,9 +12,10 @@ Commentary text is published for use on copticfaith.org with the permission of t
 
 Bible Scripture data
 -------------------
-Arabic Smith–Van Dyke (1865) is public domain. The 66-book Arabic dataset is
-sourced from https://github.com/midvash/bible-data at revision
-d9fe1779447717bbfcb578e505b893125cad581c. Provenance and source checksums are in
-data/bible/avd-source.json. Commentary and Scripture are separate works.
-NKJV Scripture is not included; the reader reserves its English text positions
-for an authorized NKJV import.
+The English King James Version (KJV) and the Arabic Smith–Van Dyke (AVD, 1865)
+are public domain. Both 66-book datasets are sourced from
+https://github.com/midvash/bible-data at revision
+d9fe1779447717bbfcb578e505b893125cad581c. Provenance, source URLs, and checksums
+are in data/bible/kjv-source.json and data/bible/avd-source.json, described in docs/DATA.md.
+Commentary and Scripture are separate works. The New King James Version (NKJV)
+is not included.

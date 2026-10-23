@@ -38,6 +38,20 @@ function listSectionSummaries(db, chapterId) {
     FROM sections WHERE chapter_id = ? ORDER BY sequence_number`).all(chapterId);
 }
 
+function listChapterSections(db, chapterId) {
+  return db.prepare('SELECT * FROM sections WHERE chapter_id = ? ORDER BY sequence_number').all(chapterId);
+}
+
+function listChapterRefs(db, chapterId, lang) {
+  return db.prepare(`SELECT r.section_id, r.ref_type, r.book_id, b.slug AS book_slug,
+      b.name_en AS book_name_en, b.name_ar AS book_name_ar,
+      r.chapter, r.verse_start, r.verse_end, r.label, r.display
+    FROM section_refs r
+    JOIN sections s ON s.id = r.section_id
+    JOIN books b ON b.id = r.book_id
+    WHERE s.chapter_id = ? AND r.lang = ? ORDER BY r.id`).all(chapterId, lang);
+}
+
 function findSectionById(db, id) {
   return db.prepare('SELECT * FROM sections WHERE id = ?').get(Number(id)) || null;
 }
@@ -104,6 +118,8 @@ module.exports = {
   listChapters,
   findChapter,
   listSectionSummaries,
+  listChapterSections,
+  listChapterRefs,
   findSectionById,
   findSectionByIndex,
   listSectionRefs,

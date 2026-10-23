@@ -14,6 +14,8 @@ test('OpenAPI document covers all endpoints', async () => {
   assert.equal(res.body.openapi.startsWith('3.'), true);
   for (const path of ['/api/v1/meta', '/api/v1/books', '/api/v1/books/{book}',
     '/api/v1/books/{book}/chapters/{chapter}',
+    '/api/v1/books/{book}/chapters/{chapter}/scripture',
+    '/api/v1/books/{book}/chapters/{chapter}/study',
     '/api/v1/books/{book}/chapters/{chapter}/sections/{index}',
     '/api/v1/sections/{id}', '/api/v1/parallel', '/api/v1/search',
     '/api/v1/references', '/health']) {
@@ -54,6 +56,8 @@ test('parallel responses have representation-specific ETags and honor If-None-Ma
 test('OpenAPI documents rate limiting on content routes', async () => {
   const res = await request(app).get('/openapi.json');
   for (const path of ['/api/v1/search', '/api/v1/sections/{id}',
+    '/api/v1/books/{book}/chapters/{chapter}/scripture',
+    '/api/v1/books/{book}/chapters/{chapter}/study',
     '/api/v1/books/{book}/chapters/{chapter}/sections/{index}', '/api/v1/parallel']) {
     assert.ok(res.body.paths[path].get.responses['429'], `missing 429 for ${path}`);
   }

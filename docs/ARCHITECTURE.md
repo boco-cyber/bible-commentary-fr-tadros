@@ -2,7 +2,8 @@
 
 ## Overview
 
-One Node.js 20 + Express service backed by a single read-only SQLite file.
+One Node.js 20 + Express service backed by a single read-only SQLite file for
+commentary and two committed gzipped JSONL files for public-domain Scripture.
 
 ```text
 Browser / website
@@ -12,12 +13,14 @@ Coolify reverse proxy (TLS, commentary.copticfaith.org)
         |
         v
 Node 20 + Express (port 3000)
-        |
-        v
-better-sqlite3 (read-only) + FTS5
-        |
-        v
-commentary.sqlite  <-- built at Docker build time from gzipped JSONL
+        |                         |
+        v                         v
+better-sqlite3 (read-only) + FTS5  in-memory KJV/AVD
+        |                         |
+        v                         v
+commentary.sqlite  <-- built      data/bible/*.jsonl.gz
+at Docker build time from         <-- loaded on first
+gzipped JSONL                         scripture/study request
 ```
 
 The API is read-only. There is no admin UI, authentication, write path, runtime
@@ -50,6 +53,12 @@ migration, or separate database service.
 3. The resulting `commentary.sqlite` is copied into the runtime image. Content
    changes therefore ship as new images, not as runtime imports.
 
+Scripture data is separate from this build. `data/bible/kjv.jsonl.gz` and
+`data/bible/avd.jsonl.gz` are copied into the image as-is. The first
+`/scripture` or `/study` request loads both into memory; no SQLite table or
+runtime write is involved. Source provenance is in `data/bible/*-source.json`
+and [DATA.md](DATA.md).
+
 ## Schema summary
 
 | Table | Purpose |
@@ -81,12 +90,54 @@ Testament.
 
 - `backend/src/app.js` assembles Express, `/health`, `/openapi.json`, `/docs/`,
   and the `/api/v1` router.
-- `backend/src/routes/` contains the catalog, chapter, section, parallel,
-  reference, search, and metadata endpoints.
-- `backend/src/db/queries.js` holds prepared read-only queries.
+- `backend/src/routes/` contains the catalog, chapter, scripture, study,
+  section, parallel, reference, search, and metadata endpoints.
+- `backend/src/db/queries.js` holds prepared read-only queries, including
+  chapter-level section and reference fetches for the study composer.
 - `backend/src/services/` handles Arabic-aware search parsing, Markdown
-  rendering helpers, plain-text extraction, and response serialization.
+  rendering helpers, plain-text extraction, response serialization, Scripture
+  loading, and study-block composition.
 - `backend/src/middleware/` handles errors and rate limiting.
+
+## Scripture and study layer
+
+`data/bible/kjv.jsonl.gz` (KJV, 31,102 verses) and `data/bible/avd.jsonl.gz`
+(AVD, 31,104 verses) use one JSON object per line: `{ book, chapter, verse,
+text }`, with `book` normalized to this repository's slug. `book-codes.json`
+maps the 66 source book codes to slugs. `*-source.json` records the pinned
+source revision, license, counts, and SHA-256 checksums.
+
+`services/scripture.js` loads each file once per process into a chapter/verse
+map and exposes translation metadata (id, name, language, license, source,
+counts) and `chapter()`, which returns every verse position from the translation
+or from commentary ranges, with `null` text when the translation lacks that
+book.
+
+`routes/study.js` composes a chapter in this order:
+
+1. Fetch all commentary sections for the chapter, ordered by `sequence_number`,
+   plus their references for each requested language.
+2. Emit commentary sections with no verse range first (chapter introductions
+   and general sections).
+3. Build a map from each range end to its commentary section(s).
+4. Walk the sorted verse positions, accumulating a `verses` block. When a
+   verse is a range end, flush the verse block and emit the commentary
+   block(s), sorted by `sequence_number`.
+5. Emit any remaining verses as the final block.
+
+A section therefore appears once per range, not once per verse. This mirrors
+the source app's `remove_dups` behavior and avoids duplicating long commentary.
+Verse text is always bilingual (KJV and AVD); `lang` and `format` select the
+commentary representation. Missing Scripture text is `null`; commentary ranges
+still establish verse positions for deuterocanonical books.
+
+`/study` responses are immutable per image build and set
+`Cache-Control: public, max-age=86400, immutable` plus an ETag over the full
+payload. `/scripture` remains the lighter verse-and-section-index view.
+
+Scripture is deliberately not stored in SQLite. The two 66-book translations
+are static, read-only inputs to the study composer, and loading them into memory
+keeps the commentary schema and build validation unchanged.
 
 ## Why SQLite is built at image build time
 

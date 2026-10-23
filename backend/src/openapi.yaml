@@ -10,6 +10,7 @@ tags:
   - { name: Meta }
   - { name: Catalog }
   - { name: Sections }
+  - { name: Study }
   - { name: Search }
   - { name: References }
 paths:
@@ -62,7 +63,7 @@ paths:
     get:
       tags: [Sections]
       summary: Chapter verses with bilingual Scripture text and commentary associations
-      description: Missing text is null. NKJV requires an authorized import. Arabic AVD covers 66 books. Commentary sections may cover multiple verses.
+      description: Bilingual KJV and AVD text. Missing text is null; deuterocanonical books have no bundled Scripture text. Commentary sections may cover multiple verses.
       parameters:
         - { $ref: "#/components/parameters/Book" }
         - { name: chapter, in: path, required: true, schema: { type: integer, minimum: 1 } }
@@ -84,8 +85,11 @@ paths:
                         additionalProperties:
                           type: object
                           properties:
-                            id: { type: string, enum: [NKJV, AVD] }
+                            id: { type: string, enum: [KJV, AVD] }
                             name: { type: string }
+                            language: { type: string, enum: [en, ar] }
+                            license: { type: string }
+                            source: { type: string, format: uri }
                             status: { type: string, enum: [available, source_required, not_found] }
                       verses:
                         type: array
@@ -99,6 +103,25 @@ paths:
                                 en: { type: [string, "null"] }
                                 ar: { type: [string, "null"] }
                             sections: { type: array, items: { type: integer } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+  /api/v1/books/{book}/chapters/{chapter}/study:
+    get:
+      tags: [Study]
+      summary: Chapter verses interleaved with commentary after each verse range
+      description: Returns ordered blocks. Commentary sections without a verse range appear first. Each verse range is followed by one commentary block. Verse text is KJV and AVD; commentary language and format are selected by query.
+      parameters:
+        - { $ref: "#/components/parameters/Book" }
+        - { name: chapter, in: path, required: true, schema: { type: integer, minimum: 1 } }
+        - { $ref: "#/components/parameters/StudyLang" }
+        - { $ref: "#/components/parameters/Format" }
+      responses:
+        "200":
+          description: Ordered verse and commentary blocks
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StudyResponse" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
@@ -194,6 +217,10 @@ components:
       name: lang
       in: query
       schema: { type: string, enum: [en, ar], default: en }
+    StudyLang:
+      name: lang
+      in: query
+      schema: { type: string, enum: [en, ar, both], default: en }
     Format:
       name: format
       in: query
@@ -264,6 +291,60 @@ components:
         references: { type: array, items: { type: object } }
         content_hash: { type: string }
         url: { type: string }
+    StudyTranslation:
+      type: object
+      properties:
+        id: { type: string, enum: [KJV, AVD] }
+        name: { type: string }
+        language: { type: string, enum: [en, ar] }
+        license: { type: string }
+        source: { type: string, format: uri }
+        status: { type: string, enum: [available, source_required, not_found] }
+    StudyVerse:
+      type: object
+      properties:
+        number: { type: integer }
+        text:
+          type: object
+          properties:
+            en: { type: [string, "null"] }
+            ar: { type: [string, "null"] }
+    StudyCommentary:
+      type: object
+      properties:
+        type: { const: commentary }
+        id: { type: integer }
+        index: { type: integer }
+        title: { type: object, properties: { en: { type: string }, ar: { type: string } } }
+        verse_ranges: { type: array, items: { type: array, items: { type: integer } } }
+        content: { type: object, description: "Keyed by language, then by html and/or markdown." }
+        references: { type: object, description: "Keyed by language; each value is an array of reference objects." }
+        content_hash: { type: string }
+        url: { type: string, format: uri }
+    StudyVersesBlock:
+      type: object
+      properties:
+        type: { const: verses }
+        verses: { type: array, items: { $ref: "#/components/schemas/StudyVerse" } }
+    StudyBlock:
+      oneOf:
+        - $ref: "#/components/schemas/StudyVersesBlock"
+        - $ref: "#/components/schemas/StudyCommentary"
+    StudyResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            book: { $ref: "#/components/schemas/Book" }
+            chapter: { $ref: "#/components/schemas/Chapter" }
+            translations:
+              type: object
+              properties:
+                en: { $ref: "#/components/schemas/StudyTranslation" }
+                ar: { $ref: "#/components/schemas/StudyTranslation" }
+            blocks: { type: array, items: { $ref: "#/components/schemas/StudyBlock" } }
+        meta: { type: object }
     MetaResponse:
       type: object
       properties:

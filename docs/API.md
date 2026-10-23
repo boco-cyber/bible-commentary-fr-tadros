@@ -6,8 +6,8 @@ All endpoints are public, read-only, `GET`-only, and require no authentication o
 
 ## Conventions
 
-- `lang=en|ar` selects the response language. Default: `en`.
-- `format=html|markdown|both` selects section content representation. Default: `html`.
+- `lang=en|ar` selects the response language. Default: `en`. `/study` also accepts `lang=both`.
+- `format=html|markdown|both` selects section and study-commentary representation. Default: `html`.
 - `book` accepts a slug (`genesis`, `1-samuel`) or numeric id.
 - `chapter` accepts `0` or `intro` for a book introduction.
 - `index` is the 1-based section index within a chapter.
@@ -48,6 +48,18 @@ curl 'https://commentary.copticfaith.org/api/v1/books?testament=nt'
 
 ```bash
 curl 'https://commentary.copticfaith.org/api/v1/books/genesis/chapters/1'
+```
+
+### Verses in a chapter
+
+```bash
+curl 'https://commentary.copticfaith.org/api/v1/books/john/chapters/3/scripture'
+```
+
+### Verses with commentary after each range
+
+```bash
+curl 'https://commentary.copticfaith.org/api/v1/books/john/chapters/3/study?lang=both&format=html'
 ```
 
 ### Full section
@@ -97,6 +109,15 @@ for (const summary of chapter.data.sections) {
   const full = await fetch(`${base}/sections/${summary.id}?lang=ar`).then((r) => r.json());
   console.log(full.data.title.ar, full.data.content.html);
 }
+
+const study = await fetch(`${base}/books/john/chapters/3/study?lang=both`).then((r) => r.json());
+for (const block of study.data.blocks) {
+  if (block.type === 'verses') {
+    for (const verse of block.verses) console.log(verse.number, verse.text.en);
+  } else {
+    console.log(block.title.en, block.content.en.html);
+  }
+}
 ```
 
 ## Caching
@@ -108,6 +129,7 @@ curl -H 'If-None-Match: "<etag>"' 'https://commentary.copticfaith.org/api/v1/sec
 ```
 
 - Section content: `Cache-Control: public, max-age=86400, immutable` and `Vary: Accept-Encoding`.
+- Study responses: `Cache-Control: public, max-age=86400, immutable` and `Vary: Accept-Encoding`; the ETag covers the full study payload.
 - Catalog and metadata: `Cache-Control: public, max-age=3600`.
 - ETags are representation-specific, so `lang` and `format` changes produce a different ETag. `parallel=1` uses a `both` representation ETag.
 - `/health` reports the build's `schema_version` and `checksum` (the corpus content checksum) and is always `no-store`.
@@ -120,22 +142,68 @@ Requests are limited to 120 per minute per IP by default. The limit is configura
 
 The commentary is by Fr. Tadros Y. Malaty / القمص تادرس يعقوب. When displaying content, retain the attribution returned by `/meta` and described in [`NOTICE`](../NOTICE). The repository's MIT license covers code only, not the commentary text.
 
+Scripture is public-domain KJV (English) and Smith–Van Dyke (Arabic). Source URLs, revision, and checksums are in `data/bible/*-source.json` and [DATA.md](DATA.md). NKJV is not bundled.
+
 `/api/v1/meta` also returns the work title in both languages, the attribution
 notice, excluded-book counts, dropped invalid reference counts, the SHA-256 of
 each committed gzipped source file, the corpus `content_checksum`, and
 `schema_version` 2. `/health` repeats the schema version and checksum so
 deployments can be verified without cached metadata.
 
-### Scripture above commentary
+### Scripture and study
 
-`GET /api/v1/books/:book/chapters/:chapter/scripture` returns every imported
-verse in that chapter, ordered by `number`. Each verse has `text.en`, `text.ar`,
-and `sections` (commentary section indices whose recorded ranges cover it).
-Sections can cover several verses. Verses without commentary remain present
-with an empty `sections` array.
+`GET /api/v1/books/:book/chapters/:chapter/scripture` returns every available
+verse in the chapter, ordered by `number`. Each verse has `text.en` (KJV),
+`text.ar` (AVD), and `sections` — the commentary section indices whose recorded
+ranges cover it. A commentary section can cover several verses. Verses without
+commentary remain present with an empty `sections` array.
 
-`translations.en` identifies NKJV and `translations.ar` identifies AVD. Status
-is `available`, `source_required`, or `not_found` for the requested chapter.
-Missing text is `null`. Arabic Van Dyke contains 66 books; deuterocanonical text
-and NKJV are not bundled. Commentary ranges retain verse positions when text
-is missing. Introductions (`0`/`intro`) return 400.
+`translations.en` identifies KJV and `translations.ar` identifies AVD. Each
+translation includes `name`, `language`, `license`, `source`, and `status`
+(`available`, `source_required`, or `not_found` for the requested chapter).
+Missing text is `null`. Both editions contain 66 books, so deuterocanonical
+text is not bundled; commentary ranges retain those verse positions. Chapter
+introductions (`0`/`intro`) return 400. NKJV is not bundled.
+
+`GET /api/v1/books/:book/chapters/:chapter/study` combines the same verse text
+with full commentary:
+
+- Query params: `lang=en|ar|both` (default `en`) and
+  `format=html|markdown|both` (default `html`). These control commentary
+  content only; verse text always includes KJV and AVD.
+- The response contains `data.translations` and `data.blocks`.
+- `blocks` is ordered. Commentary sections with no verse range (chapter
+  introductions and general sections) come first. Each `verses` block is
+  followed by one `commentary` block after the range it covers.
+- Every verse appears exactly once across `verses` blocks. A commentary
+  section appears once per range, mirroring the source app's de-duplication.
+- `commentary.content` is keyed by language and then by `html`/`markdown`.
+  `commentary.references` is keyed by language.
+- `commentary.title` always contains both `en` and `ar`.
+- Missing Scripture text is `null`; commentary remains present.
+- If a chapter has no commentary, the response contains only `verses` blocks.
+
+Example shape:
+
+```json
+{
+  "data": {
+    "book": { "slug": "john" },
+    "chapter": { "number": 3 },
+    "translations": {
+      "en": { "id": "KJV", "status": "available" },
+      "ar": { "id": "AVD", "status": "available" }
+    },
+    "blocks": [
+      { "type": "commentary", "id": 5286, "verse_ranges": [], "content": { "en": { "html": "..." } } },
+      { "type": "verses", "verses": [{ "number": 1, "text": { "en": "...", "ar": "..." } }] },
+      { "type": "commentary", "id": 5287, "verse_ranges": [[1, 13]], "content": { "en": { "html": "..." } } }
+    ]
+  },
+  "meta": { "lang": "en", "format": "html" }
+}
+```
+
+`lang=both` returns `content.en` and `content.ar`; `format=both` returns both
+`html` and `markdown`. Study responses are cacheable and ETagged. See
+[DATA.md](DATA.md) for translation provenance.
