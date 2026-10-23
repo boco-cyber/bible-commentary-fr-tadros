@@ -4,6 +4,13 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -22,7 +29,16 @@ jobs:
   deploy:
     needs: verify
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
+      - name: Capture current production build
+        id: before
+        run: |
+          meta=$(curl -fsS -H 'Cache-Control: no-cache' \
+            "https://commentary.copticfaith.org/api/v1/meta?t=$(date +%s)" 2>/dev/null || true)
+          current=$(printf '%s' "$meta" | jq -r '.data.build // empty' 2>/dev/null || true)
+          echo "before=$current" >> "$GITHUB_OUTPUT"
+          echo "current production build: ${current:-<none>}"
       - name: Trigger Coolify deployment
         env:
           COOLIFY_BASE_URL: ${{ secrets.COOLIFY_BASE_URL }}
@@ -35,12 +51,22 @@ jobs:
           curl -fsS -X POST "${resolve_args[@]}" \
             -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
             "$COOLIFY_BASE_URL/api/v1/deploy?uuid=$COOLIFY_APP_UUID"
-      - name: Wait for production health
+      - name: Wait for production to serve the new build
+        env:
+          BEFORE_BUILD: ${{ steps.before.outputs.before }}
         run: |
           for i in $(seq 1 60); do
-            if curl -fsS https://commentary.copticfaith.org/health >/dev/null; then
-              echo "production healthy"; exit 0
+            stamp="$(date +%s)-$i"
+            meta=$(curl -fsS -H 'Cache-Control: no-cache' \
+              "https://commentary.copticfaith.org/api/v1/meta?t=$stamp" 2>/dev/null || true)
+            build=$(printf '%s' "$meta" | jq -r '.data.build // empty' 2>/dev/null || true)
+            if [ -n "$build" ] && [ "$build" != "$BEFORE_BUILD" ] \
+              && curl -fsS -H 'Cache-Control: no-cache' \
+                "https://commentary.copticfaith.org/health?t=$stamp" >/dev/null; then
+              echo "production healthy on new build $build (was ${BEFORE_BUILD:-<none>})"
+              exit 0
             fi
             sleep 10
           done
-          echo "deployment did not become healthy"; exit 1
+          echo "deployment did not become healthy on a new build (before=${BEFORE_BUILD:-<none>})"
+          exit 1
