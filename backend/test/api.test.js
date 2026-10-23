@@ -19,6 +19,7 @@ test('meta describes the corpus and its provenance', async () => {
   assert.equal(res.body.data.books, 67);
   assert.equal(res.body.data.books_total, 73);
   assert.equal(res.body.data.sections, 7590);
+  assert.deepEqual(res.body.data.chunks, { en: 12457, ar: 11955 });
   assert.deepEqual(res.body.data.languages, ['en', 'ar']);
   assert.match(res.body.data.attribution, /Tadros/);
   assert.match(res.body.data.author.ar, /[\u0600-\u06FF]/);
@@ -29,7 +30,7 @@ test('meta describes the corpus and its provenance', async () => {
   assert.match(res.body.data.source_sha256.en, /^[0-9a-f]{64}$/);
   assert.match(res.body.data.source_sha256.ar, /^[0-9a-f]{64}$/);
   assert.match(res.body.data.content_checksum, /^[0-9a-f]{64}$/);
-  assert.equal(res.body.data.schema_version, 2);
+  assert.equal(res.body.data.schema_version, 3);
   assert.ok(res.body.data.build);
 });
 

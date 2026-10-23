@@ -8,6 +8,7 @@ const { referencesRouter } = require('./references');
 const { searchRouter } = require('./search');
 const { scriptureRouter } = require('./scripture');
 const { studyRouter } = require('./study');
+const { verseCommentaryRouter } = require('./verse-commentary');
 
 function apiRouter() {
   const router = express.Router();
@@ -16,6 +17,7 @@ function apiRouter() {
   router.use(chaptersRouter());
   router.use(scriptureRouter());
   router.use(studyRouter());
+  router.use(verseCommentaryRouter());
   router.use(sectionsRouter());
   router.use(parallelRouter());
   router.use(referencesRouter());

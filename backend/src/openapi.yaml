@@ -125,6 +125,26 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
+  /api/v1/books/{book}/chapters/{chapter}/verses/{verse}/commentary:
+    get:
+      tags: [Study]
+      summary: Commentary chunks for a selected verse
+      description: Returns the KJV/AVD verse text and every split commentary chunk covering the selected verse. Verses with no source commentary return an empty list.
+      parameters:
+        - { $ref: "#/components/parameters/Book" }
+        - { name: chapter, in: path, required: true, schema: { type: integer, minimum: 1 } }
+        - { name: verse, in: path, required: true, schema: { type: integer, minimum: 1 } }
+        - { $ref: "#/components/parameters/StudyLang" }
+        - { $ref: "#/components/parameters/Format" }
+      responses:
+        "200":
+          description: Verse text and covering commentary chunks
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VerseCommentaryResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
   /api/v1/books/{book}/chapters/{chapter}/sections/{index}:
     get:
       tags: [Sections]
@@ -345,6 +365,41 @@ components:
                 ar: { $ref: "#/components/schemas/StudyTranslation" }
             blocks: { type: array, items: { $ref: "#/components/schemas/StudyBlock" } }
         meta: { type: object }
+    VerseCommentaryEntry:
+      type: object
+      properties:
+        id: { type: integer }
+        section_id: { type: integer }
+        index: { type: integer }
+        lang: { type: string, enum: [en, ar] }
+        title: { type: object, properties: { en: { type: string }, ar: { type: string } } }
+        verse_start: { type: integer }
+        verse_end: { type: integer }
+        content: { type: object, description: "html and/or markdown for this entry's language." }
+        references: { type: array, items: { type: object } }
+        content_hash: { type: string }
+        url: { type: string, format: uri }
+    VerseCommentaryResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            book: { $ref: "#/components/schemas/Book" }
+            chapter: { $ref: "#/components/schemas/Chapter" }
+            number: { type: integer }
+            text:
+              type: object
+              properties:
+                en: { type: [string, "null"] }
+                ar: { type: [string, "null"] }
+            translations:
+              type: object
+              properties:
+                en: { $ref: "#/components/schemas/StudyTranslation" }
+                ar: { $ref: "#/components/schemas/StudyTranslation" }
+            commentary: { type: array, items: { $ref: "#/components/schemas/VerseCommentaryEntry" } }
+        meta: { type: object }
     MetaResponse:
       type: object
       properties:
@@ -361,6 +416,7 @@ components:
             books: { type: integer }
             books_total: { type: integer }
             sections: { type: integer }
+            chunks: { type: object }
             ref_segments: { type: object }
             dropped_refs: { type: object }
             languages: { type: array, items: { type: string } }

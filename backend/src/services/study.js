@@ -1,4 +1,4 @@
-const { bookSummary } = require('./serializer');
+const { bookSummary, referencePayload } = require('./serializer');
 
 function languages(lang) {
   return lang === 'both' ? ['en', 'ar'] : [lang];
@@ -13,20 +13,6 @@ function sectionContent(section, langs, format) {
     content[lang] = representation;
   }
   return content;
-}
-
-function referencePayload(ref) {
-  return {
-    type: ref.ref_type,
-    book_id: ref.book_id,
-    book_slug: ref.book_slug,
-    book: { slug: ref.book_slug, name: { en: ref.book_name_en, ar: ref.book_name_ar } },
-    chapter: ref.chapter,
-    verse_start: ref.verse_start,
-    verse_end: ref.verse_end,
-    label: ref.label,
-    display: ref.display,
-  };
 }
 
 function groupReferences(refs, langs) {

@@ -47,9 +47,12 @@ migration, or separate database service.
    - renders Markdown to sanitized HTML with `markdown-it` (`html: false`);
    - generates markup-free plain-text search bodies (stripping horizontal rules
      and Markdown backslash escapes), Arabic normalization, and FTS5 indexes;
+   - splits each ranged commentary section into verse-aware Markdown chunks at
+     inline verse markers and paragraph boundaries, renders each chunk to
+     sanitized HTML, and inserts `commentary_chunks` for English and Arabic;
    - inserts all rows in one transaction and records attribution, source
-     SHA-256s, a corpus content checksum, row/reference counts, and schema
-     version 2.
+     SHA-256s, a corpus content checksum, row/reference/chunk counts, and schema
+     version 3.
 3. The resulting `commentary.sqlite` is copied into the runtime image. Content
    changes therefore ship as new images, not as runtime imports.
 
@@ -63,11 +66,12 @@ and [DATA.md](DATA.md).
 
 | Table | Purpose |
 |---|---|
-| `meta` | Build timestamp, schema version 2, row/reference/drop counts, attribution, source SHA-256s, corpus content checksum |
+| `meta` | Build timestamp, schema version 3, row/reference/chunk counts, attribution, source SHA-256s, corpus content checksum |
 | `books` | Full 73-book catalog: id, slug, book number, testament, English/Arabic names, expected chapters, and `included` |
 | `chapters` | One row per expected chapter, including chapter `0` book introductions and missing chapters with `section_count = 0` |
 | `sections` | Paired English/Arabic content, titles, verse ranges, rendered HTML/Markdown, and content hash |
 | `section_refs` | Per-language scripture reference tokens and resolved target ranges |
+| `commentary_chunks` | Verse-aware commentary chunks: section, book/chapter, language, verse range, Markdown/HTML, and chunk hash |
 | `sections_plain_en`, `sections_plain_ar` | Markup-free text used for snippets and search |
 | `sections_fts_en`, `sections_fts_ar` | FTS5 external-content indexes with `unicode61 remove_diacritics 2` |
 
@@ -91,12 +95,13 @@ Testament.
 - `backend/src/app.js` assembles Express, `/health`, `/openapi.json`, `/docs/`,
   and the `/api/v1` router.
 - `backend/src/routes/` contains the catalog, chapter, scripture, study,
-  section, parallel, reference, search, and metadata endpoints.
+  per-verse commentary, section, parallel, reference, search, and metadata
+  endpoints.
 - `backend/src/db/queries.js` holds prepared read-only queries, including
   chapter-level section and reference fetches for the study composer.
 - `backend/src/services/` handles Arabic-aware search parsing, Markdown
   rendering helpers, plain-text extraction, response serialization, Scripture
-  loading, and study-block composition.
+  loading, commentary splitting, and study-block composition.
 - `backend/src/middleware/` handles errors and rate limiting.
 
 ## Scripture and study layer
@@ -138,6 +143,34 @@ payload. `/scripture` remains the lighter verse-and-section-index view.
 Scripture is deliberately not stored in SQLite. The two 66-book translations
 are static, read-only inputs to the study composer, and loading them into memory
 keeps the commentary schema and build validation unchanged.
+
+## Per-verse commentary chunks
+
+`backend/src/services/split-commentary.js` splits each ranged section's Markdown
+at inline verse markers (`\[vN\]` and `\[N\]`) and at paragraph boundaries, so
+tables and paragraphs stay intact. It removes the section's leading
+`[v1] [v2]...` metadata list and strips the markers used as boundaries while
+keeping out-of-range footnote markers. Arabic-Indic digits are normalized for
+marker detection.
+
+`build-db.js` renders each chunk to sanitized HTML and inserts it into
+`commentary_chunks` with `(section_id, book_id, chapter, lang, sequence_number,
+verse_start, verse_end, content_md, content_html, content_hash)`. The table is
+indexed for `(lang, book_id, chapter, verse_start, verse_end)`.
+
+`GET /api/v1/books/:book/chapters/:chapter/verses/:verse/commentary` queries
+chunks where `verse_start <= verse <= verse_end`. It returns KJV/AVD text plus
+each covering chunk, title, references, and the parent section URL. `lang=both`
+returns one entry per language.
+
+The split is source-driven: sections without inline verse markers remain a
+single chunk covering their whole range. No verse boundaries are invented.
+
+Current coverage: 6,349 ranged sections per language produce 12,457 English and
+11,955 Arabic chunks. 1,928 English and 1,737 Arabic sections split into multiple
+chunks; the remaining multi-verse sections stay as range chunks. One section
+(`nt_9_6:6`, Galatians 6:6-10) contains only verse metadata and produces no
+chunks, so its verses return an empty commentary list.
 
 ## Why SQLite is built at image build time
 
