@@ -1,5 +1,8 @@
 # Deployment
 
+Runtime: **AboHub (`155.248.209.35`)**. The Coolify control plane stays at
+`https://hub.copticfaith.org` (`163.192.16.13`). See [production topology](../DEPLOYMENT.md).
+
 Production runs on Coolify at `https://commentary.copticfaith.org`. The SQLite
 database is built inside the Docker image, so there is no persistent volume,
 init job, or runtime migration. The public-domain Scripture JSONL under
@@ -54,7 +57,7 @@ Optional repository variables:
 
 | Variable | Purpose |
 |---|---|
-| `PRODUCTION_RESOLVE` | `curl --resolve` for the public API origin, e.g. `commentary.copticfaith.org:443:163.192.16.13`, when Cloudflare blocks GitHub health checks |
+| `PRODUCTION_RESOLVE` | `curl --resolve` for the public API origin, e.g. `commentary.copticfaith.org:443:155.248.209.35`, when Cloudflare blocks GitHub health checks |
 | `COOLIFY_RESOLVE` | `curl --resolve` value such as `hub.copticfaith.org:443:163.192.16.13`, used to bypass Cloudflare Bot Fight Mode during deployment |
 
 The workflow runs the test suite and database build before triggering a
