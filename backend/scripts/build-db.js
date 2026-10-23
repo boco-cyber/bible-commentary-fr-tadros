@@ -5,6 +5,8 @@ const crypto = require('node:crypto');
 const Database = require('better-sqlite3');
 const { readJsonlGz } = require('./lib/jsonl');
 const { renderMarkdown } = require('../src/services/render');
+const { markdownToPlain } = require('../src/services/plain-text');
+const { normalizeForSearch } = require('../src/services/normalize');
 
 const EXPECTED = { books: 67, sections: 7590 };
 const DEFAULT_DATA = path.join(__dirname, '..', '..', 'data');
@@ -48,6 +50,20 @@ CREATE TABLE section_refs (
 );
 CREATE INDEX idx_refs_target ON section_refs(book_id, chapter, verse_start, verse_end);
 CREATE INDEX idx_refs_section ON section_refs(section_id, lang);
+CREATE TABLE sections_plain_en (
+  id INTEGER PRIMARY KEY REFERENCES sections(id), title TEXT NOT NULL, body TEXT NOT NULL
+);
+CREATE TABLE sections_plain_ar (
+  id INTEGER PRIMARY KEY REFERENCES sections(id), title TEXT NOT NULL, body TEXT NOT NULL
+);
+CREATE VIRTUAL TABLE sections_fts_en USING fts5(
+  title, body, content='sections_plain_en', content_rowid='id',
+  tokenize='unicode61 remove_diacritics 2'
+);
+CREATE VIRTUAL TABLE sections_fts_ar USING fts5(
+  title, body, content='sections_plain_ar', content_rowid='id',
+  tokenize='unicode61 remove_diacritics 2'
+);
 `;
 
 function parseArgs() {
@@ -112,6 +128,8 @@ async function buildDb({ dataDir, outFile }) {
     const insertRef = db.prepare(`INSERT INTO section_refs
       (section_id, lang, ref_type, book_id, chapter, verse_start, verse_end, label, display, raw_token)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    const insertPlainEn = db.prepare('INSERT INTO sections_plain_en (id, title, body) VALUES (?, ?, ?)');
+    const insertPlainAr = db.prepare('INSERT INTO sections_plain_ar (id, title, body) VALUES (?, ?, ?)');
     const refCounts = { en: 0, ar: 0 };
 
     const byBookChapter = new Map();
@@ -174,6 +192,8 @@ async function buildDb({ dataDir, outFile }) {
                 }
               }
             }
+            insertPlainEn.run(sectionId, normalizeForSearch(enRow.title || ''), normalizeForSearch(markdownToPlain(mdEn)));
+            insertPlainAr.run(sectionId, normalizeForSearch(arRow.title || ''), normalizeForSearch(markdownToPlain(mdAr)));
             inserted += 1;
           }
         }
@@ -194,6 +214,8 @@ async function buildDb({ dataDir, outFile }) {
       setMeta.run('attribution', 'Fr. Tadros Y. Malaty / القمص تادرس يعقوب');
     });
     transaction();
+    db.exec("INSERT INTO sections_fts_en(sections_fts_en) VALUES('rebuild')");
+    db.exec("INSERT INTO sections_fts_ar(sections_fts_ar) VALUES('rebuild')");
     db.close();
     db = null;
     fs.renameSync(tempFile, outFile);
