@@ -42,6 +42,24 @@ function listSectionRefs(db, sectionId, lang) {
     FROM section_refs WHERE section_id = ? AND lang = ? ORDER BY id`).all(sectionId, lang);
 }
 
+function findReferenceSections(db, { bookId, chapter, verse, lang, limit, offset }) {
+  const where = 'r.book_id = ? AND r.chapter = ? AND r.verse_start <= ? AND r.verse_end >= ? AND r.lang = ?';
+  const total = db.prepare(`SELECT COUNT(DISTINCT s.id) AS n FROM section_refs r
+    JOIN sections s ON s.id = r.section_id WHERE ${where}`).get(bookId, chapter, verse, verse, lang).n;
+  const rows = db.prepare(`SELECT s.id, s.section_index, s.title_en, s.title_ar, s.verse_ranges_json,
+      c.number AS chapter_number, b.slug AS book_slug, b.name_en, b.name_ar,
+      r.label, r.display, r.chapter AS ref_chapter, r.verse_start, r.verse_end
+    FROM section_refs r
+    JOIN sections s ON s.id = r.section_id
+    JOIN chapters c ON c.id = s.chapter_id
+    JOIN books b ON b.id = c.book_id
+    WHERE ${where}
+    GROUP BY s.id
+    ORDER BY b.book_number, c.number, s.section_index
+    LIMIT ? OFFSET ?`).all(bookId, chapter, verse, verse, lang, limit, offset);
+  return { rows, total };
+}
+
 module.exports = {
   listBooks,
   findBook,
@@ -51,4 +69,5 @@ module.exports = {
   findSectionById,
   findSectionByIndex,
   listSectionRefs,
+  findReferenceSections,
 };
