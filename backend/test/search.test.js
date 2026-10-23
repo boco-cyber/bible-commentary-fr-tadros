@@ -31,6 +31,12 @@ test('Arabic search is diacritic-insensitive', async () => {
   assert.equal(withDiacritics.body.data.length, without.body.data.length);
 });
 
+test('search rejects control characters instead of failing', async () => {
+  const res = await request(app).get('/api/v1/search?q=a%00b&lang=en');
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error.code, 'BAD_REQUEST');
+});
+
 test('search filters by book and rejects invalid input', async () => {
   const res = await request(app).get('/api/v1/search?q=creation&lang=en&book=genesis');
   assert.ok(res.body.data.every((hit) => hit.book.slug === 'genesis'));

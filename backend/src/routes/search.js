@@ -22,7 +22,8 @@ function searchRouter() {
     const offset = intParam(req.query.offset, 0, 0, 10000);
     const testament = req.query.testament;
     const chapter = req.query.chapter === undefined ? undefined : intParam(req.query.chapter, null, 0, 200);
-    if (q.length < 2 || q.length > 200 || !['en', 'ar'].includes(lang) || limit === null || offset === null
+    if (q.length < 2 || q.length > 200 || /[\u0000-\u001F\u007F]/.test(q)
+        || !['en', 'ar'].includes(lang) || limit === null || offset === null
         || (testament && !['ot', 'nt'].includes(testament)) || chapter === null) {
       return res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'Invalid search parameters' } });
     }
