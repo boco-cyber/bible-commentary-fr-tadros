@@ -1,3 +1,4 @@
+const crypto = require('node:crypto');
 const express = require('express');
 const { findBook, findChapter, findSectionById, findSectionByIndex, listSectionRefs } = require('../db/queries');
 const { sectionPayload } = require('../services/serializer');
@@ -9,8 +10,12 @@ function parseLanguage(value) {
 }
 
 function parseFormat(value) {
-  const format = value || 'both';
+  const format = value || 'html';
   return ['html', 'markdown', 'both'].includes(format) ? format : null;
+}
+
+function sectionEtag(section, lang, format) {
+  return `"${crypto.createHash('sha256').update(`${section.content_hash}:${lang}:${format}`).digest('hex')}"`;
 }
 
 function sendSection(req, res, section) {
@@ -32,7 +37,7 @@ function sendSection(req, res, section) {
     format,
     req.app.locals.options.publicBaseUrl,
   );
-  const etag = `"${section.content_hash}"`;
+  const etag = sectionEtag(section, lang, format);
   res.set('ETag', etag);
   res.set('Cache-Control', 'public, max-age=86400, immutable');
   res.set('Vary', 'Accept-Encoding');

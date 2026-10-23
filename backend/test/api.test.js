@@ -1,5 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const request = require('supertest');
 const { createApp } = require('../src/app');
 const { openTestDb } = require('./helpers/db');
@@ -7,6 +8,10 @@ const { openTestDb } = require('./helpers/db');
 const db = openTestDb();
 const app = createApp(db, { rateLimitPerMin: 10000 });
 test.after(() => db.close());
+
+function expectedEtag(hash, lang, format) {
+  return `"${crypto.createHash('sha256').update(`${hash}:${lang}:${format}`).digest('hex')}"`;
+}
 
 test('meta describes the corpus', async () => {
   const res = await request(app).get('/api/v1/meta');
@@ -53,14 +58,22 @@ test('unknown book returns 404 JSON', async () => {
 });
 
 test('section by chapter and index returns content and refs', async () => {
-  const res = await request(app).get('/api/v1/books/genesis/chapters/1/sections/1?lang=en');
+  const res = await request(app).get('/api/v1/books/genesis/chapters/1/sections/1?lang=en&format=both');
   assert.equal(res.status, 200);
   assert.equal(res.body.data.source_id, 'ot_1_1:0');
   assert.ok(res.body.data.content.html.includes('<p>'));
   assert.ok(res.body.data.content.markdown.length > 0);
   assert.ok(Array.isArray(res.body.data.references));
-  assert.equal(res.headers.etag, `"${res.body.data.content_hash}"`);
+  assert.equal(res.headers.etag, expectedEtag(res.body.data.content_hash, 'en', 'both'));
   assert.match(res.headers['cache-control'], /immutable/);
+});
+
+test('section defaults to html only', async () => {
+  const res = await request(app).get('/api/v1/sections/1');
+  assert.equal(res.status, 200);
+  assert.ok(res.body.data.content.html.length > 0);
+  assert.equal(res.body.data.content.markdown, undefined);
+  assert.equal(res.headers.etag, expectedEtag(res.body.data.content_hash, 'en', 'html'));
 });
 
 test('section supports markdown-only and Arabic responses', async () => {
@@ -75,6 +88,27 @@ test('matching If-None-Match returns 304', async () => {
   const first = await request(app).get('/api/v1/sections/1');
   const second = await request(app).get('/api/v1/sections/1').set('If-None-Match', first.headers.etag);
   assert.equal(second.status, 304);
+});
+
+test('ETags identify the language and format representation', async () => {
+  const paths = [
+    '/api/v1/sections/1',
+    '/api/v1/sections/1?lang=ar',
+    '/api/v1/sections/1?format=markdown',
+    '/api/v1/sections/1?lang=ar&format=markdown',
+  ];
+  const responses = await Promise.all(paths.map((path) => request(app).get(path)));
+  const etags = responses.map((res) => res.headers.etag);
+  assert.equal(responses.every((res) => res.status === 200), true);
+  assert.equal(new Set(etags).size, paths.length);
+  assert.equal(
+    (await request(app).get(paths[3]).set('If-None-Match', etags[3])).status,
+    304,
+  );
+  assert.equal(
+    (await request(app).get('/api/v1/sections/1?lang=ar').set('If-None-Match', etags[3])).status,
+    200,
+  );
 });
 
 test('unknown chapter and index return 404', async () => {
