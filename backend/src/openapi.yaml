@@ -334,8 +334,10 @@ components:
       properties:
         number: { type: integer }
         title: { type: object }
+        description: { type: object }
         section_count: { type: integer }
         available: { type: boolean }
+        commentary: { type: object }
     Section:
       type: object
       properties:
@@ -347,6 +349,8 @@ components:
         index: { type: integer }
         section_count: { type: integer }
         title: { type: object }
+        kind: { type: string }
+        attribution: { type: object }
         verse_ranges: { type: array, items: { type: object } }
         content: { type: object, properties: { html: { type: string }, markdown: { type: string } } }
         references: { type: array, items: { type: object } }
@@ -374,14 +378,17 @@ components:
       type: object
       properties:
         type: { const: commentary }
-        id: { type: integer }
+        id: { type: integer, description: "The section id" }
         index: { type: integer }
+        chunk_id: { type: integer, description: "Identifies the exact chunk" }
+        lang: { type: string }
         title: { type: object, properties: { en: { type: string }, ar: { type: string } } }
         verse_ranges: { type: array, items: { type: array, items: { type: integer } } }
         content: { type: object, description: "Keyed by language, then by html and/or markdown." }
         references: { type: object, description: "Keyed by language; each value is an array of reference objects." }
         content_hash: { type: string }
         url: { type: string, format: uri }
+        scripture_quote: { type: object }
     StudyVersesBlock:
       type: object
       properties:
@@ -428,6 +435,7 @@ components:
         verse_start: { type: integer }
         verse_end: { type: integer }
         content: { type: object, description: "html and/or markdown for this entry's language." }
+        scripture_quote: { type: object }
         references: { type: array, items: { type: object } }
         content_hash: { type: string }
         url: { type: string, format: uri }

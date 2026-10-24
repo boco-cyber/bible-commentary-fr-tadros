@@ -125,3 +125,12 @@ test('unsplit source ranges are shared context rather than repeated individual c
   assert.ok(res.body.data.shared_commentary.some((entry) => entry.scope === 'range' && entry.verse_start === 3 && entry.verse_end === 5));
   assert.equal(res.body.data.source_commentary_status.en.available, true);
 });
+
+test('2 Kings 6 section and verse commentary expose attribution and quote metadata', async () => {
+  const section = await request(app).get('/api/v1/books/2-kings/chapters/6/sections/1?lang=en');
+  assert.equal(section.body.data.title.en, 'Chapter 6 commentary');
+  assert.equal(section.body.data.attribution.en, 'Origen');
+  assert.equal(section.body.data.kind, 'verse_commentary');
+  const verse = await request(app).get('/api/v1/books/2-kings/chapters/6/verses/1/commentary?lang=en&format=markdown');
+  assert.ok(verse.body.data.commentary[0].scripture_quote.markdown.includes('sons of the prophets'));
+});

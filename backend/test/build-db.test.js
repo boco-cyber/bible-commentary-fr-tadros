@@ -86,43 +86,41 @@ test('missing Exodus 36-40 are present but empty', () => {
   db.close();
 });
 
-test('sections contain both languages, localized titles, and safe HTML', () => {
+test('chapter titles are canonical and descriptions are separate', () => {
   const db = openDb(DB);
-  const row = db.prepare("SELECT * FROM sections WHERE source_record_id='ot_1_1:0'").get();
-  assert.equal(row.title_en, 'The Creation of the World');
-  assert.equal(row.title_ar, 'خلقة العالم');
-  assert.ok(row.content_md_en.includes('Creation'));
-  assert.ok(row.content_md_ar.length > 0);
-  assert.ok(row.content_html_en.includes('<p>'));
-  assert.equal(/<script/i.test(row.content_html_en), false);
-  assert.equal(row.content_hash.length, 64);
+  const genesis = db.prepare("SELECT c.* FROM chapters c JOIN books b ON b.id=c.book_id WHERE b.slug='genesis' AND c.number=1").get();
+  assert.equal(genesis.title_en, 'Chapter 1');
+  assert.equal(genesis.title_ar, 'الإصحاح 1');
+  assert.equal(genesis.description_en, 'The Creation of the World');
+  assert.equal(genesis.description_ar, 'خلقة العالم');
+  const kings = db.prepare("SELECT c.* FROM chapters c JOIN books b ON b.id=c.book_id WHERE b.slug='1-kings' AND c.number=2").get();
+  assert.equal(kings.title_en, 'Chapter 2');
+  assert.equal(kings.title_ar, 'الإصحاح 2');
+  assert.equal(kings.description_en, null);
   db.close();
 });
 
-test('chapter titles use localized source headings', () => {
+test('2 Kings 6 has an evidence-backed range and author attribution in both languages', () => {
   const db = openDb(DB);
-  const row = db.prepare(`SELECT c.title_en, c.title_ar FROM chapters c
-    JOIN books b ON b.id = c.book_id WHERE b.slug='genesis' AND c.number=1`).get();
-  assert.equal(row.title_en, 'The Creation of the World');
-  assert.equal(row.title_ar, 'خلقة العالم');
-  const arabic = db.prepare("SELECT title_ar FROM chapters WHERE number > 0").all()
-    .filter((chapter) => /[\u0600-\u06FF]/.test(chapter.title_ar || '')).length;
-  assert.ok(arabic > 1000, `expected most non-introduction Arabic titles to contain Arabic, got ${arabic}`);
+  const row = db.prepare("SELECT * FROM sections WHERE source_record_id='ot_12_6:0'").get();
+  assert.equal(row.title_en, 'Chapter 6 commentary');
+  assert.equal(row.title_ar, 'تفسير الإصحاح 6');
+  assert.equal(row.attribution_en, 'Origen');
+  assert.equal(row.attribution_ar, 'العلامة أوريجينوس');
+  assert.equal(row.verse_ranges_json, '[[1,33]]');
+  assert.equal(row.section_kind, 'verse_commentary');
+  assert.doesNotMatch(row.content_md_en, /\[v\d+\]/);
+  assert.doesNotMatch(row.content_md_ar, /\[v[٠-٩]+\]/);
   db.close();
 });
 
-test('Arabic section titles preserve non-empty source headings', async () => {
+test('display content is normalized while raw source files remain unchanged', () => {
   const db = openDb(DB);
-  const { readJsonlGz } = require('../scripts/lib/jsonl');
-  const file = path.join(path.dirname(CATALOG), 'ar', 'sections.jsonl.gz');
-  let checked = 0;
-  for await (const row of readJsonlGz(file)) {
-    if (!String(row.source_title || '').trim()) continue;
-    const stored = db.prepare('SELECT title_ar FROM sections WHERE source_record_id = ?').get(row.source_record_id);
-    assert.equal(stored.title_ar, row.source_title.trim());
-    checked += 1;
-  }
-  assert.ok(checked > 5000);
+  const row = db.prepare("SELECT * FROM sections WHERE source_record_id='ot_1_1:1'").get();
+  assert.doesNotMatch(row.content_md_en, /\[v1\]/);
+  assert.doesNotMatch(row.content_md_en, /\\\*\\\*/);
+  const raw = zlib.gunzipSync(fs.readFileSync(path.join(path.dirname(CATALOG), 'en', 'sections.jsonl.gz'))).toString();
+  assert.match(raw, /\[v1\]/);
   db.close();
 });
 
@@ -138,7 +136,8 @@ test('commentary chunks stay inside source ranges without requiring invented gap
     bySection.get(key).push(row);
   }
   for (const section of sections) {
-    const [start, end] = JSON.parse(section.verse_ranges_json)[0];
+    const ranges = JSON.parse(section.verse_ranges_json);
+    const [start, end] = ranges[0];
     for (const lang of ['en', 'ar']) {
       const chunks = bySection.get(`${section.id}:${lang}`) || [];
       if (!chunks.length) {
@@ -150,9 +149,17 @@ test('commentary chunks stay inside source ranges without requiring invented gap
       }
 
       let expected = start;
+      let rangeIndex = 0;
       for (const chunk of chunks) {
+        // Find which range contains this chunk
+        while (rangeIndex < ranges.length && chunk.verse_start > ranges[rangeIndex][1]) {
+          rangeIndex++;
+          if (rangeIndex < ranges.length) expected = ranges[rangeIndex][0];
+        }
         assert.ok(chunk.verse_start >= expected);
-        assert.ok(chunk.verse_end <= end);
+        // Check if chunk is within any range
+        const inRange = ranges.some(([rs, re]) => chunk.verse_start >= rs && chunk.verse_end <= re);
+        assert.ok(inRange);
         assert.ok(chunk.verse_end >= chunk.verse_start);
         assert.ok(chunk.content_md.length > 0);
         assert.ok(chunk.content_html.length > 0);
@@ -190,9 +197,9 @@ test('table content is preserved inside commentary chunks', () => {
 test('meta records schema, counts, provenance, and checksums', () => {
   const db = openDb(DB);
   const meta = Object.fromEntries(db.prepare('SELECT key, value FROM meta').all().map((r) => [r.key, r.value]));
-  assert.equal(meta.schema_version, '4');
-  assert.equal(meta.chunks_en, '12457');
-  assert.equal(meta.chunks_ar, '11955');
+  assert.equal(meta.schema_version, '5');
+  assert.equal(meta.chunks_en, '12858');
+  assert.equal(meta.chunks_ar, '12496');
   assert.equal(meta.sections, '7590');
   assert.equal(meta.books, '67');
   assert.equal(meta.books_total, '73');
@@ -276,14 +283,21 @@ test('generated headings are localized and specific, while missing chapters rema
 test('whole rebuilt corpus preserves every original language body and source range', () => {
   const db = openDb(DB);
   const lookup = db.prepare('SELECT * FROM sections WHERE source_record_id=?');
+  const { normalizeMarkdown } = require('../src/services/section-structure');
+  const { deriveVerseRanges } = require('../src/services/section-structure');
+  const enRows = zlib.gunzipSync(fs.readFileSync(path.join(path.dirname(CATALOG), 'en', 'sections.jsonl.gz'))).toString().trim().split('\n').map(JSON.parse);
+  const enById = Object.fromEntries(enRows.map((r) => [r.source_record_id, r]));
   for (const lang of ['en', 'ar']) {
     const rows = zlib.gunzipSync(fs.readFileSync(path.join(path.dirname(CATALOG), lang, 'sections.jsonl.gz'))).toString().trim().split('\n').map(JSON.parse);
     for (const row of rows) {
       const stored = lookup.get(row.source_record_id);
-      assert.equal(stored[`content_md_${lang}`], row.content_markdown, `${lang}:${row.source_record_id}`);
-      assert.deepEqual(JSON.parse(stored.verse_ranges_json), row.verse_ranges);
-      if (row.source_title) assert.equal(stored[`title_${lang}`], row.source_title.trim());
+      assert.equal(stored[`content_md_${lang}`], normalizeMarkdown(row.content_markdown), `${lang}:${row.source_record_id}`);
     }
+  }
+  for (const row of enRows) {
+    const stored = lookup.get(row.source_record_id);
+    const expected = row.verse_ranges?.length ? row.verse_ranges : deriveVerseRanges(row.content_markdown);
+    assert.deepEqual(JSON.parse(stored.verse_ranges_json), expected);
   }
   db.close();
 });

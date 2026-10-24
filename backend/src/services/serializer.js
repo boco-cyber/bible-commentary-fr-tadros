@@ -17,6 +17,7 @@ function bookDetail(row, chapters) {
     chapters: chapters.map((chapter) => ({
       number: chapter.number,
       title: { en: chapter.title_en, ar: chapter.title_ar },
+      description: { en: chapter.description_en, ar: chapter.description_ar },
       section_count: chapter.section_count,
       available: chapter.section_count > 0,
       commentary: commentaryAvailability(chapter.section_count > 0),
@@ -30,6 +31,7 @@ function chapterDetail(book, chapter, sections) {
     chapter: {
       number: chapter.number,
       title: { en: chapter.title_en, ar: chapter.title_ar },
+      description: { en: chapter.description_en, ar: chapter.description_ar },
       section_count: chapter.section_count,
       available: chapter.section_count > 0,
       commentary: commentaryAvailability(chapter.section_count > 0),
@@ -70,6 +72,8 @@ function sectionPayload(row, book, chapter, refs, lang, format, baseUrl) {
     index: row.section_index,
     section_count: row.section_count,
     title: { [lang]: lang === 'ar' ? row.title_ar : row.title_en },
+    kind: row.section_kind,
+    attribution: { en: row.attribution_en, ar: row.attribution_ar },
     verse_ranges: JSON.parse(row.verse_ranges_json),
     content,
     references: refs.map(referencePayload),

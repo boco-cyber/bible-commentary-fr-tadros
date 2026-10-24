@@ -4,8 +4,9 @@ const ARABIC_DIGITS = {
   '۰': '0', '۱': '1', '۲': '2', '۳': '3', '۴': '4',
   '۵': '5', '۶': '6', '۷': '7', '۸': '8', '۹': '9',
 };
-const MARKER = /\\\[(v?)([٠-٩۰-۹0-9]+)\\\]/g;
-const LEADING_VERSES = /^(?:\s*\[v[٠-٩۰-۹0-9]+\])+\s*/;
+const MARKER = /\\?\[(v?)([٠-٩۰-۹0-9]+)\\?\]/g;
+const BOLD_QUOTE = /^\s*\*\*\s*(?:\\?\[?v?\s*)?([0-9٠-٩۰-۹]{1,3})(?![0-9٠-٩۰-۹])\s+(?!\.)/gm;
+const LEADING_VERSES = /^(?:\s*\\?\[v[٠-٩۰-۹0-9]+\\?\])+\s*/;
 
 function westernDigits(value) {
   return value.replace(/[٠-٩۰-۹]/g, (digit) => ARABIC_DIGITS[digit]);
@@ -56,6 +57,12 @@ function findMarkers(text, verseStart, verseEnd) {
     if (!explicit && !/\*\*|["“”]/.test(body)) continue;
     candidates.push({ verse, explicit, paragraphStart: paragraph.start, paragraphEnd: paragraph.end });
   }
+  for (const match of text.matchAll(BOLD_QUOTE)) {
+    const verse = Number(westernDigits(match[1]));
+    if (!Number.isInteger(verse) || verse < verseStart || verse > verseEnd) continue;
+    const paragraph = paragraphAt(text, match.index);
+    candidates.push({ verse, explicit: true, paragraphStart: paragraph.start, paragraphEnd: paragraph.end });
+  }
   candidates.sort((left, right) => left.paragraphStart - right.paragraphStart);
   const selected = [];
   const starts = new Set();
@@ -83,8 +90,8 @@ function findMarkers(text, verseStart, verseEnd) {
 function cleanChunk(text, verseStart, verseEnd) {
   return text
     .replace(LEADING_VERSES, '')
-    .replace(/\\\[v[٠-٩۰-۹0-9]+\\\]/g, '')
-    .replace(/\\\[([٠-٩۰-۹0-9]+)\\\]/g, (match, digits) => {
+    .replace(/\\?\[v[٠-٩۰-۹0-9]+\\?\]/g, '')
+    .replace(/\\?\[([٠-٩۰-۹0-9]+)\\?\]/g, (match, digits) => {
       const verse = Number(westernDigits(digits));
       return verse >= verseStart && verse <= verseEnd ? '' : match;
     })

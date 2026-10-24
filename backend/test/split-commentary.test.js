@@ -121,6 +121,16 @@ test('returns no chunks when the section body is only verse metadata', () => {
 
 
 test('a single inline marker is never extended across the whole source range', () => {
-  const chunks = splitCommentary('**"Verse three." \\[v3\\]**\n\nCommentary on three.', 1, 5);
+  const chunks = splitCommentary('**"Verse three." [v3]**\n\nCommentary on three.', 1, 5);
   assert.deepEqual(ranges(chunks), [[3, 3]]);
+});
+
+test('splits 2 Kings 6 bold opening quotations in both languages', () => {
+  for (const lang of ['en', 'ar']) {
+    const row = section(lang, 'ot_12_6:0');
+    const chunks = splitCommentary(row.content_markdown, 1, 33);
+    assert.equal(chunks.length, 33);
+    assert.deepEqual(ranges(chunks), Array.from({ length: 33 }, (_, i) => [i + 1, i + 1]));
+    assert.match(chunks[0].markdown, lang === 'en' ? /sons of the prophets/ : /بنو الأنبياء/);
+  }
 });

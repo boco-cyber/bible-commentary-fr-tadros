@@ -46,7 +46,7 @@ function verseCommentaryRouter() {
     for (const language of langs) {
       const chunks = findVerseChunks(db, { bookId: book.id, chapter: chapterNumber, verse, lang: language });
       for (const chunk of chunks) {
-        commentary.push({
+        const entry = {
           id: chunk.id,
           section_id: chunk.section_id,
           scope: chunk.verse_start === chunk.verse_end ? 'verse' : 'range',
@@ -59,7 +59,27 @@ function verseCommentaryRouter() {
           references: listSectionRefs(db, chunk.section_id, language).map(referencePayload),
           content_hash: chunk.content_hash,
           url: `${baseUrl}/api/v1/sections/${chunk.section_id}`,
-        });
+        };
+        if (chunk.quote_md || chunk.quote_html) {
+          const scriptureQuote = {
+            markdown: format === 'html' ? undefined : chunk.quote_md,
+            html: format === 'markdown' ? undefined : chunk.quote_html,
+          };
+          if (scriptureQuote.markdown === undefined) delete scriptureQuote.markdown;
+          if (scriptureQuote.html === undefined) delete scriptureQuote.html;
+          if (Object.keys(scriptureQuote).length > 0) {
+            entry.scripture_quote = scriptureQuote;
+          } else if (chunk.quote_md || chunk.quote_html) {
+            entry.scripture_quote = chunk.quote_md || chunk.quote_html ? {
+              ...(format !== 'html' && chunk.quote_md ? { markdown: chunk.quote_md } : {}),
+              ...(format !== 'markdown' && chunk.quote_html ? { html: chunk.quote_html } : {}),
+            } : null;
+            if (entry.scripture_quote && Object.keys(entry.scripture_quote).length === 0) {
+              entry.scripture_quote = null;
+            }
+          }
+        }
+        commentary.push(entry);
       }
     }
 

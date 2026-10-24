@@ -7,7 +7,10 @@
       "generated_titles_without_source_heading": 1974,
       "verse_positions_without_individual_chunk": 9112,
       "original_records_compared": 7590,
-      "source_mismatches": []
+      "source_mismatches": [],
+      "attribution_titles": 20,
+      "derived_ranges": 20,
+      "unlinked_chapter_wide": 1221
     },
     "ar": {
       "records": 7590,
@@ -16,7 +19,10 @@
       "generated_titles_without_source_heading": 1966,
       "verse_positions_without_individual_chunk": 8742,
       "original_records_compared": 7590,
-      "source_mismatches": []
+      "source_mismatches": [],
+      "attribution_titles": 19,
+      "derived_ranges": 20,
+      "unlinked_chapter_wide": 1221
     }
   },
   "missing_chapters": [

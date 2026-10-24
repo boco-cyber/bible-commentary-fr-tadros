@@ -1,7 +1,7 @@
 const crypto = require('node:crypto');
 const express = require('express');
 const {
-  findBook, findChapter, listChapterSections, listChapterRefs,
+  findBook, findChapter, listChapterSections, listChapterRefs, listChapterChunks,
 } = require('../db/queries');
 const { createScriptureStore } = require('../services/scripture');
 const { buildStudy } = require('../services/study');
@@ -32,6 +32,9 @@ function studyRouter() {
     const refs = {};
     for (const language of langs) refs[language] = listChapterRefs(db, chapter.id, language);
 
+    const chunks = {};
+    for (const language of langs) chunks[language] = listChapterChunks(db, chapter.id, language);
+
     req.app.locals.scriptureStore ||= createScriptureStore();
     const scripture = req.app.locals.scriptureStore.chapter(book.slug, number, sections);
     const data = buildStudy({
@@ -39,6 +42,7 @@ function studyRouter() {
       chapter,
       scripture,
       sections,
+      chunks,
       refs,
       lang,
       format,

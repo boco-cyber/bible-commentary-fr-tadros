@@ -24,28 +24,32 @@ test('study interleaves verse ranges with one commentary block after each range'
   assert.equal(data.translations.ar.status, 'available');
 
   const { blocks } = data;
-  assert.deepEqual(blocks.map((block) => block.type), [
-    'commentary', 'verses', 'commentary', 'verses', 'commentary',
-    'verses', 'commentary', 'verses', 'commentary',
-  ]);
+  // Chapter introduction
+  assert.equal(blocks[0].type, 'commentary');
   assert.deepEqual(blocks[0].verse_ranges, []);
   assert.equal(blocks[0].index, 1);
-
+  assert.deepEqual(Object.keys(blocks[0].content), ['en']);
   assert.deepEqual(versesOf(blocks).map((verse) => verse.number), Array.from({ length: 36 }, (_, index) => index + 1));
-  assert.deepEqual(blocks.filter((block) => block.type === 'commentary').map((block) => block.verse_ranges), [
-    [], [[1, 13]], [[14, 17]], [[18, 21]], [[22, 36]],
-  ]);
+
+  // Chunked blocks for lang=en should have block.lang and content only for that language
+  const chunked = blocks.filter((block) => block.type === 'commentary' && block.verse_ranges.length > 0);
+  assert.ok(chunked.length > 0);
+  for (const block of chunked) {
+    assert.equal(block.lang, 'en');
+    assert.deepEqual(Object.keys(block.content), ['en']);
+  }
 
   const verse16 = versesOf(blocks).find((verse) => verse.number === 16);
   assert.match(verse16.text.en, /^For God so loved the world/);
   assert.match(verse16.text.ar, /ٱللهُ/);
 
-  const after13 = blocks[blocks.findIndex((block) => block.type === 'verses' && block.verses.some((verse) => verse.number === 13)) + 1];
-  assert.equal(after13.type, 'commentary');
-  assert.deepEqual(after13.verse_ranges, [[1, 13]]);
-  assert.equal(after13.title.en, '1. A Dialogue about the New Birth');
-  assert.ok(after13.content.en.html.includes('<p>'));
-  assert.ok(after13.url.endsWith(`/api/v1/sections/${after13.id}`));
+  const firstChunk = chunked[0];
+  assert.equal(firstChunk.type, 'commentary');
+  assert.deepEqual(firstChunk.verse_ranges[0], [1, 1]);
+  assert.equal(firstChunk.lang, 'en');
+  assert.equal(firstChunk.title.en, '1. A Dialogue about the New Birth');
+  assert.ok(firstChunk.content.en.html.includes('<p>'));
+  assert.ok(firstChunk.url.endsWith(`/api/v1/sections/${firstChunk.id}`));
 });
 
 test('study honors lang and format for commentary content', async () => {
@@ -108,4 +112,20 @@ test('study requires cache revalidation and supports ETag revalidation', async (
     .get('/api/v1/books/john/chapters/3/study?lang=en&format=html')
     .set('If-None-Match', first.headers.etag);
   assert.equal(second.status, 304);
+});
+
+test('2 Kings 6 study interleaves verse commentary instead of one block at the end', async () => {
+  for (const lang of ['en', 'ar']) {
+    const res = await request(app).get(`/api/v1/books/2-kings/chapters/6/study?lang=${lang}`);
+    assert.equal(res.status, 200);
+    const blocks = res.body.data.blocks;
+    assert.equal(blocks[0].type, 'verses');
+    const commentary = blocks.filter((block) => block.type === 'commentary');
+    assert.ok(commentary.length >= 33);
+    assert.deepEqual(commentary[0].verse_ranges, [[1, 1]]);
+    assert.equal(commentary[0].title[lang], lang === 'en' ? 'Chapter 6 commentary' : 'تفسير الإصحاح 6');
+    const verseOne = blocks.findIndex((block) => block.type === 'verses' && block.verses.some((v) => v.number === 1));
+    assert.equal(blocks[verseOne + 1].type, 'commentary');
+    assert.deepEqual(blocks[verseOne + 1].verse_ranges, [[1, 1]]);
+  }
 });

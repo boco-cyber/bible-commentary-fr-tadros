@@ -8,6 +8,10 @@ const { renderMarkdown } = require('../src/services/render');
 const { markdownToPlain } = require('../src/services/plain-text');
 const { normalizeForSearch } = require('../src/services/normalize');
 const { splitCommentary } = require('../src/services/split-commentary');
+const {
+  canonicalChapterTitle, firstNameDescriptive, isAttribution, isGenericLabel,
+  generatedSectionTitle, normalizeMarkdown, deriveVerseRanges, sectionKind, extractOpeningQuote,
+} = require('../src/services/section-structure');
 
 const EXPECTED = {
   books: 67,
@@ -17,9 +21,9 @@ const EXPECTED = {
   refSegmentsAr: 45234,
   droppedRefsEn: 1,
   droppedRefsAr: 1,
-  chunksEn: 12457,
-  chunksAr: 11955,
-  schemaVersion: 4,
+  chunksEn: 12858,
+  chunksAr: 12496,
+  schemaVersion: 5,
 };
 const DEFAULT_DATA = path.join(__dirname, '..', '..', 'data');
 const DEFAULT_OUT = path.join(__dirname, '..', 'data', 'commentary.sqlite');
@@ -45,6 +49,7 @@ CREATE TABLE books (
 CREATE TABLE chapters (
   id INTEGER PRIMARY KEY, book_id INTEGER NOT NULL REFERENCES books(id),
   number INTEGER NOT NULL, title_en TEXT, title_ar TEXT,
+  description_en TEXT, description_ar TEXT,
   section_count INTEGER NOT NULL, UNIQUE (book_id, number)
 );
 CREATE TABLE sections (
@@ -52,6 +57,7 @@ CREATE TABLE sections (
   chapter_id INTEGER NOT NULL REFERENCES chapters(id),
   sequence_number INTEGER NOT NULL, section_index INTEGER NOT NULL,
   section_count INTEGER NOT NULL, title_en TEXT, title_ar TEXT,
+  attribution_en TEXT, attribution_ar TEXT, section_kind TEXT NOT NULL,
   verse_start INTEGER, verse_end INTEGER, verse_ranges_json TEXT NOT NULL,
   content_md_en TEXT NOT NULL, content_md_ar TEXT NOT NULL,
   content_html_en TEXT NOT NULL, content_html_ar TEXT NOT NULL,
@@ -85,6 +91,8 @@ CREATE TABLE commentary_chunks (
   verse_end INTEGER NOT NULL,
   content_md TEXT NOT NULL,
   content_html TEXT NOT NULL,
+  quote_md TEXT,
+  quote_html TEXT,
   content_hash TEXT NOT NULL,
   UNIQUE (section_id, lang, sequence_number)
 );
@@ -183,16 +191,17 @@ async function buildDb({ dataDir, outFile }) {
       (id, slug, book_number, testament, name_en, name_ar, short_en, short_ar, chapters_expected, included)
       VALUES (@id, @slug, @book_number, @testament, @name_en, @name_ar, @short_en, @short_ar, @chapters_expected, @included)`);
     const insertChapter = db.prepare(`INSERT INTO chapters
-      (book_id, number, title_en, title_ar, section_count) VALUES (?, ?, ?, ?, ?)`);
+      (book_id, number, title_en, title_ar, description_en, description_ar, section_count) VALUES (?, ?, ?, ?, ?, ?, ?)`);
     const insertSection = db.prepare(`INSERT INTO sections
       (source_record_id, chapter_id, sequence_number, section_index, section_count,
-       title_en, title_ar, verse_start, verse_end, verse_ranges_json,
+       title_en, title_ar, attribution_en, attribution_ar, section_kind,
+       verse_start, verse_end, verse_ranges_json,
        content_md_en, content_md_ar, content_html_en, content_html_ar, content_hash)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
 
     const insertChunk = db.prepare(`INSERT INTO commentary_chunks
-      (section_id, book_id, chapter, lang, sequence_number, verse_start, verse_end, content_md, content_html, content_hash)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      (section_id, book_id, chapter, lang, sequence_number, verse_start, verse_end, content_md, content_html, quote_md, quote_html, content_hash)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     const insertRef = db.prepare(`INSERT INTO section_refs
       (section_id, lang, ref_type, book_id, chapter, verse_start, verse_end, label, display, raw_token)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
@@ -229,56 +238,73 @@ async function buildDb({ dataDir, outFile }) {
 
         for (let number = 0; number <= book.chaptersCount; number += 1) {
           const keys = byBookChapter.get(`${book.id}:${number}`) || [];
-          let firstKey = keys[0];
-          for (const key of keys) {
-            const enSource = String(en.get(key).source_title || '').trim();
-            const arSource = String(ar.get(key).source_title || '').trim();
-            if (enSource || arSource) { firstKey = key; break; }
-          }
-          const first = keys.length ? en.get(firstKey) : null;
-          const firstAr = keys.length ? ar.get(firstKey) : null;
-          const fallbackEn = number === 0 ? 'Introduction' : `Chapter ${number}`;
-          const fallbackAr = number === 0 ? 'مقدمة' : `الإصحاح ${number}`;
-          const titleEn = pickTitle(first?.source_title, sourceHeading(first?.title), fallbackEn);
-          const titleAr = pickTitle(firstAr?.source_title, sourceHeading(firstAr?.title), fallbackAr);
-          const info = insertChapter.run(book.id, number, titleEn, titleAr, keys.length);
+          const sessionTitleEn = firstNameDescriptive(keys.map((key) => en.get(key).source_title), 'en');
+          const sessionTitleAr = firstNameDescriptive(keys.map((key) => ar.get(key).source_title), 'ar');
+          const descriptionEn = sessionTitleEn;
+          const descriptionAr = sessionTitleAr;
+          const info = insertChapter.run(
+            book.id, number,
+            canonicalChapterTitle(number, 'en'), canonicalChapterTitle(number, 'ar'),
+            descriptionEn, descriptionAr, keys.length,
+          );
           const chapterId = Number(info.lastInsertRowid);
 
           for (const key of keys) {
             const enRow = en.get(key);
             const arRow = ar.get(key);
-            const mdEn = enRow.content_markdown || '';
-            const mdAr = arRow.content_markdown || '';
-            if (!mdEn || !mdAr) throw new Error(`Empty content for ${key}`);
-            const titleEn = pickTitle(enRow.source_title, sourceHeading(enRow.title), number === 0 ? 'Introduction' : `Chapter ${number} commentary`);
-            const titleAr = pickTitle(arRow.source_title, sourceHeading(arRow.title), number === 0 ? 'مقدمة' : `تفسير الإصحاح ${number}`);
+            const rawEn = enRow.content_markdown || '';
+            const rawAr = arRow.content_markdown || '';
+            if (!rawEn || !rawAr) throw new Error(`Empty content for ${key}`);
+            const rangesEn = enRow.verse_ranges?.length ? enRow.verse_ranges : deriveVerseRanges(rawEn);
+            const rangesAr = arRow.verse_ranges?.length ? arRow.verse_ranges : deriveVerseRanges(rawAr);
+            const normalizedRanges = rangesEn.map((r) => [Number(r[0]), Number(r[1])]);
+            const attributionEn = isAttribution(enRow.source_title, 'en') ? enRow.source_title.trim() : null;
+            const attributionAr = isAttribution(arRow.source_title, 'ar') ? arRow.source_title.trim() : null;
+            const titleEn = !String(enRow.source_title || '').trim() || isAttribution(enRow.source_title, 'en') || isGenericLabel(enRow.source_title)
+              ? generatedSectionTitle({ chapter: number, ranges: normalizedRanges }, 'en') : enRow.source_title.trim();
+            const titleAr = !String(arRow.source_title || '').trim() || isAttribution(arRow.source_title, 'ar') || isGenericLabel(arRow.source_title)
+              ? generatedSectionTitle({ chapter: number, ranges: normalizedRanges }, 'ar') : arRow.source_title.trim();
+            const mdEn = normalizeMarkdown(rawEn);
+            const mdAr = normalizeMarkdown(rawAr);
             const contentHash = hashContent(titleEn, titleAr, mdEn, mdAr);
             contentHashes.push(`${key}:${contentHash}`);
+            const estimatedChunkCount = normalizedRanges.reduce(
+              (count, [start, end]) => count + splitCommentary(rawEn, start, end).length, 0,
+            );
+            const kind = sectionKind({
+              chapter: number, sectionIndex: enRow.section_index, ranges: normalizedRanges,
+              chunkCount: estimatedChunkCount,
+              attribution: attributionEn,
+            });
+            const verseStart = enRow.verse_start == null ? (normalizedRanges.length ? normalizedRanges[0][0] : null) : Number(enRow.verse_start);
+            const verseEnd = enRow.verse_end == null ? (normalizedRanges.length ? normalizedRanges[normalizedRanges.length - 1][1] : null) : Number(enRow.verse_end);
             const infoSection = insertSection.run(
               key, chapterId, Number(enRow.sequence_number), Number(enRow.section_index), Number(enRow.section_count),
-              titleEn, titleAr,
-              enRow.verse_start == null ? null : Number(enRow.verse_start),
-              enRow.verse_end == null ? null : Number(enRow.verse_end),
-              JSON.stringify(enRow.verse_ranges || []),
+              titleEn, titleAr, attributionEn, attributionAr, kind,
+              verseStart,
+              verseEnd,
+              JSON.stringify(normalizedRanges),
               mdEn, mdAr, renderMarkdown(mdEn), renderMarkdown(mdAr),
               contentHash,
             );
             if (!infoSection.changes) throw new Error(`Failed to insert ${key}`);
             const sectionId = Number(infoSection.lastInsertRowid);
-            const ranges = enRow.verse_ranges || [];
-            if (ranges.length > 1) throw new Error(`Multiple verse ranges are not supported for ${key}`);
-            if (ranges.length === 1) {
-              const [start, end] = ranges[0].map(Number);
-              for (const [lang, markdown] of [['en', mdEn], ['ar', mdAr]]) {
-                const chunks = splitCommentary(markdown, start, end);
-                for (const [index, chunk] of chunks.entries()) {
+            for (const [lang, raw] of [['en', rawEn], ['ar', rawAr]]) {
+              let chunkIndex = 0;
+              for (const [start, end] of normalizedRanges) {
+                const chunks = splitCommentary(raw, start, end);
+                for (const chunk of chunks) {
+                  const markdown = normalizeMarkdown(chunk.markdown);
+                  if (!markdown) continue;
+                  const quote = extractOpeningQuote(markdown, chunk.verseStart, chunk.verseEnd);
+                  const quoteMd = quote ? normalizeMarkdown(quote.markdown) : null;
                   const chunkHash = crypto.createHash('sha256')
-                    .update([contentHash, lang, chunk.verseStart, chunk.verseEnd, chunk.markdown].join('\0'))
+                    .update([contentHash, lang, chunk.verseStart, chunk.verseEnd, markdown].join('\0'))
                     .digest('hex');
                   insertChunk.run(
-                    sectionId, book.id, number, lang, index,
-                    chunk.verseStart, chunk.verseEnd, chunk.markdown,
-                    renderMarkdown(chunk.markdown), chunkHash,
+                    sectionId, book.id, number, lang, chunkIndex++,
+                    chunk.verseStart, chunk.verseEnd, markdown, renderMarkdown(markdown),
+                    quoteMd, quoteMd ? renderMarkdown(quoteMd) : null, chunkHash,
                   );
                   chunkCounts[lang] += 1;
                 }

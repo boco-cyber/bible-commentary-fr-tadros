@@ -66,7 +66,7 @@ and [DATA.md](DATA.md).
 
 | Table | Purpose |
 |---|---|
-| `meta` | Build timestamp, schema version 3, row/reference/chunk counts, attribution, source SHA-256s, corpus content checksum |
+| `meta` | Build timestamp, schema version 5, row/reference/chunk counts, attribution, source SHA-256s, corpus content checksum |
 | `books` | Full 73-book catalog: id, slug, book number, testament, English/Arabic names, expected chapters, and `included` |
 | `chapters` | One row per expected chapter, including chapter `0` book introductions and missing chapters with `section_count = 0` |
 | `sections` | Paired English/Arabic content, titles, verse ranges, rendered HTML/Markdown, and content hash |
@@ -187,9 +187,20 @@ FTS5 also provides better English and Arabic full-text search than a generic
 document database text index while remaining inside the same single file.
 
 
+
+## Commentary structure (schema v5)
+
+Canonical chapter titles are `Introduction`/`Chapter N` (English) and `مقدمة`/`الإصحاح N` (Arabic). Descriptive session titles from source headings are stored separately as chapter `description_en`/`description_ar` when present; numbered headings, author names, and range labels do not become descriptions.
+
+Author names are extracted to `sections.attribution_en`/`attribution_ar`. Section titles are canonicalized when the source title is attribution, generic, or missing; otherwise descriptive source titles are preserved.
+
+Committed JSONL remains raw source. Display normalization (removing leading `[vN]` metadata, unescaping `\*\*`, normalizing list markers, collapsing blank lines) happens in `build-db.js`; the audit keeps comparisons against raw `content_markdown` to prove the committed source is unchanged.
+
+Verse ranges are only derived when there is explicit evidence: bold opening Scripture quotations beginning with a verse number form a sequential sequence from verse 1 or 2 onward. Such sections are marked `verse_commentary` and chunked per verse/marker boundaries (including bold opening quotations). Sections with uncertain or no evidence remain `chapter_introduction` with `verse_ranges = []`. The study composer interleaves `commentary_chunks` so verse-specific commentary appears next to the corresponding verses; chunk blocks expose `scripture_quote` (the opening bold quotation) when present.
+
 ## Navigation and Bible search
 
-Schema v4 stores both bundled translations in `scripture_verses`, keyed by
+Schema v5 stores both bundled translations in `scripture_verses`, keyed by
 book/chapter/verse/language, with original display text and normalized search text.
 `scripture_fts` indexes that normalized text using FTS5. The database builder
 validates source positions and translation counts before atomically publishing

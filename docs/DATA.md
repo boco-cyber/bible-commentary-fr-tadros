@@ -82,3 +82,9 @@ The committed JSONL files are the source of truth. To regenerate them:
    `*-source.json`, along with the source URL, revision, counts, and license.
 
 Keep `book-codes.json` stable unless the upstream book codes change.
+
+
+## Commentary source and display fields
+
+- Committed JSONL files under `data/en/sections.jsonl.gz` and `data/ar/sections.jsonl.gz` are **raw source** (unchanged by normalization). Display Markdown is normalized in `backend/scripts/build-db.js` and stored in `sections.content_md_en/ar`.
+- New columns/fields in schema v5: `chapters.description_en/ar`, `sections.attribution_en/ar`, `sections.section_kind`, `commentary_chunks.quote_md/html`. These are derived from raw source evidence; no data edits to committed JSONL.

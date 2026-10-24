@@ -19,7 +19,7 @@ test('meta describes the corpus and its provenance', async () => {
   assert.equal(res.body.data.books, 67);
   assert.equal(res.body.data.books_total, 73);
   assert.equal(res.body.data.sections, 7590);
-  assert.deepEqual(res.body.data.chunks, { en: 12457, ar: 11955 });
+  assert.deepEqual(res.body.data.chunks, { en: 12858, ar: 12496 });
   assert.deepEqual(res.body.data.languages, ['en', 'ar']);
   assert.match(res.body.data.attribution, /Tadros/);
   assert.match(res.body.data.author.ar, /[\u0600-\u06FF]/);
@@ -30,7 +30,7 @@ test('meta describes the corpus and its provenance', async () => {
   assert.match(res.body.data.source_sha256.en, /^[0-9a-f]{64}$/);
   assert.match(res.body.data.source_sha256.ar, /^[0-9a-f]{64}$/);
   assert.match(res.body.data.content_checksum, /^[0-9a-f]{64}$/);
-  assert.equal(res.body.data.schema_version, 4);
+  assert.equal(res.body.data.schema_version, 5);
   assert.ok(res.body.data.build);
 });
 
@@ -161,6 +161,13 @@ test('ETags identify the language and format representation', async () => {
 test('unknown chapter and index return 404', async () => {
   assert.equal((await request(app).get('/api/v1/books/genesis/chapters/999')).status, 404);
   assert.equal((await request(app).get('/api/v1/books/genesis/chapters/1/sections/999')).status, 404);
+});
+
+test('chapter payloads expose canonical title and separate description', async () => {
+  const res = await request(app).get('/api/v1/books/genesis/chapters/1');
+  assert.equal(res.status, 200);
+  assert.equal(res.body.data.chapter.title.en, 'Chapter 1');
+  assert.equal(res.body.data.chapter.description.en, 'The Creation of the World');
 });
 
 test('numeric route parameters must be plain integers', async () => {
