@@ -114,3 +114,10 @@ source URLs, and SHA-256 checksums are in `data/bible/*-source.json` and
 - `GET /api/v1/books/:book/chapters/:chapter/verses/:verse/commentary` returns every split commentary chunk whose range covers one verse. This is the verse-picker endpoint; verses without source commentary return an empty list.
 
 See [docs/API.md](docs/API.md) for the block shape and examples.
+
+
+## Production hosting
+
+Production runs on **AboHub (`155.248.209.35`)**, managed by the existing
+[Coolify dashboard](https://hub.copticfaith.org). See [DEPLOYMENT.md](DEPLOYMENT.md)
+for the deployment branch, application UUID, GitHub updates, data, and recovery.
